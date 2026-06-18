@@ -111,12 +111,18 @@ export default function DanmakuSendPage() {
       // ignore
     }
 
-    sendDanmaku(matchId, {
+    const result = sendDanmaku(matchId, {
       content: sendContent,
       senderName: senderName.trim(),
       senderSide,
       color,
     });
+
+    if (!result.success) {
+      setError(result.error ?? '发送失败，请重试');
+      setSentTip(null);
+      return;
+    }
 
     setContent('');
     setError(null);

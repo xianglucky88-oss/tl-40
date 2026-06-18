@@ -17,17 +17,19 @@ interface FloatingItem {
   id: string;
   danmaku: Danmaku;
   top: number;
+  row: number;
   duration: number;
-  createdAt: number;
-  mountKey: number;
+  startTime: number;
+  estimatedWidth: number;
 }
 
 interface DanmakuDisplayProps {
   matchId: string;
 }
 
-const MAX_FLOATING = 15;
 const FLOATING_HEIGHT = 38;
+const ROW_SPACING = 10;
+const MIN_HORIZONTAL_GAP = 160;
 
 export const DanmakuDisplay = ({ matchId }: DanmakuDisplayProps) => {
   const getDanmakuByMatch = useDebateStore((s) => s.getDanmakuByMatch);
@@ -46,21 +48,32 @@ export const DanmakuDisplay = ({ matchId }: DanmakuDisplayProps) => {
   const [, forceTick] = useState(0);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const usedRows = useRef<{ endAt: number; row: number }[]>([]);
   const listScrollRef = useRef<HTMLDivElement>(null);
   const historyScrollRef = useRef<HTMLDivElement>(null);
   const mountCounter = useRef(0);
+  const poolIndexRef = useRef(0);
+  const rowLastLaunchRef = useRef<Map<number, number>>(new Map());
+  const rowLastItemRightRef = useRef<Map<number, number>>(new Map());
 
   const speedMs = useMemo(() => {
     switch (speed) {
       case 'slow':
-        return 15000;
+        return 18000;
       case 'fast':
-        return 7500;
+        return 9000;
       default:
-        return 11000;
+        return 13000;
     }
   }, [speed]);
+
+  const getMaxRows = useCallback(() => {
+    const containerH = containerRef.current?.clientHeight ?? 280;
+    return Math.max(1, Math.floor((containerH - 24) / (FLOATING_HEIGHT + ROW_SPACING)));
+  }, []);
+
+  const estimateWidth = useCallback((d: Danmaku) => {
+    return Math.min(420, 130 + d.content.length * 17 + d.senderName.length * 10);
+  }, []);
 
   const sideColorClass = (side?: 'pro' | 'con' | 'neutral') => {
     switch (side) {
@@ -73,86 +86,157 @@ export const DanmakuDisplay = ({ matchId }: DanmakuDisplayProps) => {
     }
   };
 
-  const findRow = useCallback((duration: number) => {
-    const now = performance.now();
-    usedRows.current = usedRows.current.filter((r) => r.endAt > now);
-    const containerH = containerRef.current?.clientHeight ?? 280;
-    const maxRows = Math.max(1, Math.floor((containerH - 24) / FLOATING_HEIGHT));
-    const usedRowNums = new Set(usedRows.current.map((r) => r.row));
-    for (let i = 0; i < maxRows; i++) {
-      if (!usedRowNums.has(i)) {
-        usedRows.current.push({ endAt: now + duration * 0.55, row: i });
-        return i;
+  const launchDanmaku = useCallback(
+    (d: Danmaku, now: number): FloatingItem | null => {
+      const maxRows = getMaxRows();
+      const containerW = containerRef.current?.clientWidth ?? 600;
+      const duration = speedMs;
+      const estW = estimateWidth(d);
+
+      let chosenRow = -1;
+      let chosenGap = -Infinity;
+
+      for (let r = 0; r < maxRows; r++) {
+        const lastLaunch = rowLastLaunchRef.current.get(r) ?? -Infinity;
+        const lastItemRightAt = rowLastItemRightRef.current.get(r) ?? -Infinity;
+        const timeSinceLaunch = now - lastLaunch;
+        const timeSinceItemPassed = now - lastItemRightAt;
+
+        if (timeSinceLaunch < 450) continue;
+
+        const itemEntryOverhead = ((estW + MIN_HORIZONTAL_GAP) / (containerW + estW)) * duration;
+        if (timeSinceItemPassed < itemEntryOverhead * 0.6) continue;
+
+        const gapScore = Math.min(timeSinceLaunch, timeSinceItemPassed * 1.2);
+        if (gapScore > chosenGap) {
+          chosenGap = gapScore;
+          chosenRow = r;
+        }
       }
-    }
-    const sorted = [...usedRows.current].sort((a, b) => a.endAt - b.endAt);
-    const oldest = sorted[0];
-    if (oldest) {
-      oldest.endAt = now + duration * 0.55;
-      return oldest.row;
-    }
-    return 0;
-  }, []);
+
+      if (chosenRow === -1) return null;
+
+      mountCounter.current += 1;
+      const item: FloatingItem = {
+        id: d.id + '-' + mountCounter.current,
+        danmaku: d,
+        row: chosenRow,
+        top: 12 + chosenRow * (FLOATING_HEIGHT + ROW_SPACING),
+        duration,
+        startTime: now,
+        estimatedWidth: estW,
+      };
+
+      rowLastLaunchRef.current.set(chosenRow, now);
+
+      return item;
+    },
+    [speedMs, getMaxRows, estimateWidth]
+  );
 
   useEffect(() => {
-    setAllDanmaku(getDanmakuByMatch(matchId).slice(-150));
+    setAllDanmaku(getDanmakuByMatch(matchId).slice(-200));
+    poolIndexRef.current = 0;
     const unsub = subscribeDanmakuChannel(matchId, (d) => {
       setAllDanmaku((prev) => {
         const exists = prev.some((x) => x.id === d.id);
         if (exists) return prev;
-        return [...prev, d].slice(-300);
+        const next = [...prev, d].slice(-400);
+        return next;
       });
-      if (enabled && mode === 'scroll') {
-        const duration = speedMs;
-        const row = findRow(duration);
-        const containerH = containerRef.current?.clientHeight ?? 280;
-        const maxRows = Math.max(1, Math.floor((containerH - 24) / FLOATING_HEIGHT));
-        const safeRow = Math.min(row, maxRows - 1);
-        mountCounter.current += 1;
-        const item: FloatingItem = {
-          id: d.id + '-' + mountCounter.current,
-          danmaku: d,
-          top: 12 + safeRow * FLOATING_HEIGHT,
-          duration,
-          createdAt: performance.now(),
-          mountKey: mountCounter.current,
-        };
-        setFloating((prev) => {
-          const now = performance.now();
-          const alive = prev.filter((f) => now - f.createdAt < f.duration + 400);
-          return [...alive.slice(-(MAX_FLOATING - 1)), item];
-        });
-      }
     });
     return unsub;
-  }, [matchId, getDanmakuByMatch, subscribeDanmakuChannel, enabled, mode, speedMs, findRow]);
+  }, [matchId, getDanmakuByMatch, subscribeDanmakuChannel]);
 
   useEffect(() => {
     if (mode !== 'scroll' || !enabled) {
       setFloating([]);
+      rowLastLaunchRef.current.clear();
+      rowLastItemRightRef.current.clear();
       return;
     }
+
+    const containerW = containerRef.current?.clientWidth ?? 600;
     let raf = 0;
+    let lastSpawnCheck = 0;
+
     const tick = () => {
       const now = performance.now();
+
       setFloating((prev) => {
-        const filtered = prev.filter((f) => now - f.createdAt < f.duration + 400);
-        if (filtered.length !== prev.length) return filtered;
-        return prev;
+        const alive: FloatingItem[] = [];
+        const recycled: FloatingItem[] = [];
+
+        for (const f of prev) {
+          const elapsed = now - f.startTime;
+          const progress = elapsed / f.duration;
+
+          if (progress < 1) {
+            alive.push(f);
+
+            const curRightX =
+              containerW + 20 - (containerW + f.estimatedWidth + 40) * progress + f.estimatedWidth;
+            if (curRightX < containerW * 0.55) {
+              const current = rowLastItemRightRef.current.get(f.row) ?? -Infinity;
+              const whenRightPasses =
+                f.startTime + ((containerW + 20) / (containerW + f.estimatedWidth + 40)) * f.duration;
+              if (whenRightPasses > current) {
+                rowLastItemRightRef.current.set(f.row, whenRightPasses);
+              }
+            }
+          } else {
+            recycled.push(f);
+          }
+        }
+
+        return alive;
       });
+
+      if (now - lastSpawnCheck > 250) {
+        lastSpawnCheck = now;
+
+        setFloating((prev) => {
+          const pool = allDanmaku;
+          if (pool.length === 0) return prev;
+
+          const maxRows = getMaxRows();
+          const targetItemsPerRow = 1.8;
+          const targetTotal = Math.max(4, Math.min(maxRows * 3, Math.floor(maxRows * targetItemsPerRow)));
+
+          if (prev.length >= targetTotal) return prev;
+
+          const toAdd: FloatingItem[] = prev.slice();
+          let attempts = 0;
+          let launched = 0;
+          const maxLaunches = 3;
+
+          while (toAdd.length < targetTotal && attempts < pool.length * 2 && launched < maxLaunches) {
+            attempts++;
+            const idx = poolIndexRef.current % pool.length;
+            poolIndexRef.current = (poolIndexRef.current + 1) % pool.length;
+            const d = pool[idx];
+            if (!d) continue;
+
+            const item = launchDanmaku(d, now + attempts * 10);
+            if (item) {
+              toAdd.push(item);
+              launched++;
+            }
+          }
+
+          return toAdd;
+        });
+      }
+
       forceTick((x) => x + 1);
       raf = requestAnimationFrame(tick);
     };
-    const interval = window.setInterval(() => {
-      const now = performance.now();
-      setFloating((prev) => prev.filter((f) => now - f.createdAt < f.duration + 400));
-    }, 800);
+
     raf = requestAnimationFrame(tick);
     return () => {
       cancelAnimationFrame(raf);
-      clearInterval(interval);
     };
-  }, [mode, enabled]);
+  }, [mode, enabled, speedMs, allDanmaku, launchDanmaku, getMaxRows]);
 
   useEffect(() => {
     if (listScrollRef.current && mode === 'list') {
@@ -180,6 +264,7 @@ export const DanmakuDisplay = ({ matchId }: DanmakuDisplayProps) => {
       clearDanmakuByMatch(matchId);
       setAllDanmaku([]);
       setFloating([]);
+      poolIndexRef.current = 0;
     }
   };
 
@@ -309,7 +394,7 @@ export const DanmakuDisplay = ({ matchId }: DanmakuDisplayProps) => {
           <div className="text-[11px] text-navy-400">
             提示：当前状态为{' '}
             <span className={enabled ? 'text-emerald-600 font-semibold' : 'text-navy-500'}>
-              {enabled ? '弹幕显示中' : '弹幕已关闭'}
+              {enabled ? '弹幕显示中（无限循环）' : '弹幕已关闭'}
             </span>
             ，观众扫码即可发送实时弹幕互动。
           </div>
@@ -345,13 +430,11 @@ export const DanmakuDisplay = ({ matchId }: DanmakuDisplayProps) => {
             </div>
           )}
           {floating.map((f) => {
-            const elapsed = performance.now() - f.createdAt;
+            const elapsed = performance.now() - f.startTime;
             const progress = Math.max(0, Math.min(1, elapsed / f.duration));
-            if (progress >= 1) return null;
             const containerW = containerRef.current?.clientWidth ?? 600;
-            const estimatedW = Math.min(420, 120 + f.danmaku.content.length * 18 + f.danmaku.senderName.length * 10);
             const startX = containerW + 20;
-            const endX = -estimatedW - 40;
+            const endX = -f.estimatedWidth - 40;
             const currentX = startX + (endX - startX) * progress;
             return (
               <div
@@ -364,7 +447,7 @@ export const DanmakuDisplay = ({ matchId }: DanmakuDisplayProps) => {
                   left: currentX,
                   maxWidth: 420,
                   textShadow: '0 1px 3px rgba(0,0,0,0.5)',
-                  opacity: progress < 0.05 ? progress / 0.05 : progress > 0.92 ? (1 - progress) / 0.08 : 1,
+                  opacity: progress < 0.04 ? progress / 0.04 : progress > 0.95 ? (1 - progress) / 0.05 : 1,
                 }}
               >
                 <span
@@ -462,39 +545,43 @@ export const DanmakuDisplay = ({ matchId }: DanmakuDisplayProps) => {
             <div className="py-10 text-center text-xs text-navy-300">暂无弹幕历史</div>
           ) : (
             <div className="p-2.5 space-y-1">
-              {allDanmaku.slice().reverse().slice(0, 200).map((d) => (
-                <div
-                  key={d.id}
-                  className="flex items-start gap-2 px-2.5 py-1.5 rounded-md text-xs border border-transparent hover:border-navy-100 hover:bg-navy-50/50 transition-colors"
-                >
-                  <span
-                    className="font-semibold flex-shrink-0 min-w-0 max-w-[90px] truncate"
-                    style={{ color: d.color ?? '#0F2944' }}
+              {allDanmaku
+                .slice()
+                .reverse()
+                .slice(0, 200)
+                .map((d) => (
+                  <div
+                    key={d.id}
+                    className="flex items-start gap-2 px-2.5 py-1.5 rounded-md text-xs border border-transparent hover:border-navy-100 hover:bg-navy-50/50 transition-colors"
                   >
-                    {d.senderName}
-                  </span>
-                  {d.senderSide && d.senderSide !== 'neutral' && (
                     <span
-                      className={`text-[9px] px-1 py-px rounded font-bold flex-shrink-0 ${
-                        d.senderSide === 'pro'
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : 'bg-rose-100 text-rose-700'
-                      }`}
+                      className="font-semibold flex-shrink-0 min-w-0 max-w-[90px] truncate"
+                      style={{ color: d.color ?? '#0F2944' }}
                     >
-                      {d.senderSide === 'pro' ? '正' : '反'}
+                      {d.senderName}
                     </span>
-                  )}
-                  <span className="text-navy-700 break-words flex-1 leading-relaxed">
-                    {d.content}
-                  </span>
-                  <span className="text-[10px] text-navy-300 flex-shrink-0 ml-1 tabular-nums">
-                    {new Date(d.createdAt).toLocaleTimeString('zh-CN', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </span>
-                </div>
-              ))}
+                    {d.senderSide && d.senderSide !== 'neutral' && (
+                      <span
+                        className={`text-[9px] px-1 py-px rounded font-bold flex-shrink-0 ${
+                          d.senderSide === 'pro'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-rose-100 text-rose-700'
+                        }`}
+                      >
+                        {d.senderSide === 'pro' ? '正' : '反'}
+                      </span>
+                    )}
+                    <span className="text-navy-700 break-words flex-1 leading-relaxed">
+                      {d.content}
+                    </span>
+                    <span className="text-[10px] text-navy-300 flex-shrink-0 ml-1 tabular-nums">
+                      {new Date(d.createdAt).toLocaleTimeString('zh-CN', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                  </div>
+                ))}
             </div>
           )}
         </div>

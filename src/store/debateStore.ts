@@ -40,6 +40,7 @@ import {
 } from '@/engines/scoringEngine';
 import { createTimerState } from '@/engines/timerEngine';
 import { getFormatRules } from '@/engines/formatRules';
+import { sanitizeDanmakuContent, escapeHtml } from '@/lib/utils';
 
 interface DebateState {
   teams: Team[];
@@ -98,12 +99,16 @@ interface DebateState {
   teamRankings: () => ReturnType<typeof calculateTeamRankings>;
   playerRankings: () => ReturnType<typeof calculatePlayerRankings>;
 
-  sendDanmaku: (matchId: string, danmaku: Omit<Danmaku, 'id' | 'matchId' | 'createdAt'>) => void;
+  sendDanmaku: (
+    matchId: string,
+    danmaku: Omit<Danmaku, 'id' | 'matchId' | 'createdAt'>
+  ) => { success: boolean; error?: string; danmaku?: Danmaku };
   getDanmakuByMatch: (matchId: string) => Danmaku[];
   setDanmakuEnabled: (matchId: string, enabled: boolean) => void;
   isDanmakuEnabled: (matchId: string) => boolean;
   clearDanmakuByMatch: (matchId: string) => void;
   subscribeDanmakuChannel: (matchId: string, callback: (d: Danmaku) => void) => () => void;
+  checkDanmakuRateLimit: (matchId: string, senderName: string) => { allowed: boolean; waitSeconds?: number };
 }
 
 const defaultTournament = buildInitialTournament();
@@ -439,12 +444,57 @@ export const useDebateStore = create<DebateState>()(
       teamRankings: () => calculateTeamRankings(get().matches, get().teams),
       playerRankings: () => calculatePlayerRankings(get().matches, get().teams),
 
+      checkDanmakuRateLimit: (matchId, senderName) => {
+        const now = Date.now();
+        const MIN_INTERVAL_MS = 2000;
+        const WINDOW_MS = 60_000;
+        const MAX_PER_WINDOW = 15;
+        const recent = get()
+          .danmakuList.filter(
+            (d) =>
+              d.matchId === matchId &&
+              d.senderName === senderName &&
+              now - d.createdAt < WINDOW_MS
+          )
+          .sort((a, b) => b.createdAt - a.createdAt);
+        if (recent.length > 0 && now - recent[0].createdAt < MIN_INTERVAL_MS) {
+          return {
+            allowed: false,
+            waitSeconds: Math.ceil((MIN_INTERVAL_MS - (now - recent[0].createdAt)) / 1000),
+          };
+        }
+        if (recent.length >= MAX_PER_WINDOW) {
+          return {
+            allowed: false,
+            waitSeconds: Math.ceil((WINDOW_MS - (now - recent[recent.length - 1].createdAt)) / 1000),
+          };
+        }
+        return { allowed: true };
+      },
+
       sendDanmaku: (matchId, danmakuInput) => {
+        const cleanContent = sanitizeDanmakuContent(danmakuInput.content);
+        if (!cleanContent) {
+          return { success: false, error: '弹幕内容不能为空' };
+        }
+        if (!danmakuInput.senderName || !danmakuInput.senderName.trim()) {
+          return { success: false, error: '昵称不能为空' };
+        }
+        const rateCheck = get().checkDanmakuRateLimit(matchId, danmakuInput.senderName.trim());
+        if (!rateCheck.allowed) {
+          return {
+            success: false,
+            error: rateCheck.waitSeconds
+              ? `发送太频繁啦，请 ${rateCheck.waitSeconds} 秒后再试`
+              : '发送太频繁，请稍后再试',
+          };
+        }
+
         const newDanmaku: Danmaku = {
           id: uid(),
           matchId,
-          content: danmakuInput.content,
-          senderName: danmakuInput.senderName,
+          content: cleanContent,
+          senderName: escapeHtml(danmakuInput.senderName.trim().slice(0, 12)),
           senderSide: danmakuInput.senderSide ?? 'neutral',
           color: danmakuInput.color,
           createdAt: Date.now(),
@@ -469,6 +519,8 @@ export const useDebateStore = create<DebateState>()(
         } catch {
           // ignore
         }
+
+        return { success: true, danmaku: newDanmaku };
       },
 
       getDanmakuByMatch: (matchId) => {
