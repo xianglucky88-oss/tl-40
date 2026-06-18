@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import {
   ChevronRight,
   Trophy,
@@ -258,10 +259,10 @@ export default function TopNav({ onMobileMenu }: TopNavProps) {
         </div>
       </div>
 
-      {settingsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/40 backdrop-blur-sm animate-fade-in"
+      {settingsOpen && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-900/40 backdrop-blur-sm animate-fade-in"
              onClick={() => setSettingsOpen(false)}>
-          <div className="card w-full max-w-lg mx-4 p-6 animate-scale-in" onClick={(e) => e.stopPropagation()}>
+          <div className="card w-full max-w-lg p-6 animate-scale-in" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h2 className="font-serif text-xl font-bold text-navy-900 flex items-center gap-2">
                 <Settings className="w-5 h-5 text-gold-500" />赛事设置
@@ -333,13 +334,14 @@ export default function TopNav({ onMobileMenu }: TopNavProps) {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
-      {helpOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/40 backdrop-blur-sm animate-fade-in"
+      {helpOpen && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-900/40 backdrop-blur-sm animate-fade-in"
              onClick={() => setHelpOpen(false)}>
-          <div className="card w-full max-w-xl mx-4 p-6 animate-scale-in max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="card w-full max-w-xl p-6 animate-scale-in max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h2 className="font-serif text-xl font-bold text-navy-900 flex items-center gap-2">
                 <HelpCircle className="w-5 h-5 text-gold-500" />帮助中心
@@ -408,7 +410,8 @@ export default function TopNav({ onMobileMenu }: TopNavProps) {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </header>
   );
