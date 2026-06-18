@@ -9,10 +9,24 @@ import {
   PlayerRanking,
   Player,
   DebateFormat,
+  BPRole,
 } from '@/types';
 import { getFormatRules } from './formatRules';
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+
+export const isBPFormat = (format: DebateFormat): boolean =>
+  format === 'british_parliamentary';
+
+const BP_ROLES: BPRole[] = ['og', 'oo', 'cg', 'co'];
+const BP_ROLE_LABELS: Record<BPRole, string> = {
+  og: '正方上院',
+  oo: '反方上院',
+  cg: '正方下院',
+  co: '反方下院',
+};
+
+export { BP_ROLE_LABELS };
 
 export const createEmptyPlayerScore = (criteria: ScoringCriterion[]): PlayerScore => {
   const criteriaScores: Record<string, number> = {};
@@ -36,7 +50,8 @@ export const createEmptyJudgeScore = (
   judgeId: string,
   format: DebateFormat,
   proPlayers: Player[],
-  conPlayers: Player[]
+  conPlayers: Player[],
+  bpPlayers?: Record<BPRole, Player[]>
 ): JudgeScore => {
   const rules = getFormatRules(format);
   const criteria = rules.scoringCriteria;
@@ -51,7 +66,7 @@ export const createEmptyJudgeScore = (
     conPlayerScores[p.id] = createEmptyPlayerScore(criteria);
   });
 
-  return {
+  const base: JudgeScore = {
     id: uid(),
     judgeId,
     proTeamScore: 0,
@@ -61,6 +76,26 @@ export const createEmptyJudgeScore = (
     comments: { pro: '', con: '', general: '' },
     submittedAt: 0,
   };
+
+  if (isBPFormat(format) && bpPlayers) {
+    const fourTeamScores = { og: 0, oo: 0, cg: 0, co: 0 };
+    const fourTeamPlayerScores: Record<BPRole, Record<string, PlayerScore>> = {
+      og: {}, oo: {}, cg: {}, co: {},
+    };
+    BP_ROLES.forEach((role) => {
+      const players = bpPlayers[role] ?? [];
+      players.forEach((p) => {
+        fourTeamPlayerScores[role][p.id] = createEmptyPlayerScore(criteria);
+      });
+    });
+    const fourTeamRankings = { og: 1, oo: 2, cg: 3, co: 4 };
+
+    base.fourTeamScores = fourTeamScores;
+    base.fourTeamPlayerScores = fourTeamPlayerScores;
+    base.fourTeamRankings = fourTeamRankings;
+  }
+
+  return base;
 };
 
 export const finalizeJudgeScore = (
@@ -93,7 +128,7 @@ export const finalizeJudgeScore = (
     Object.values(finalizedCon).reduce((s, p) => s + p.total, 0) /
     Math.max(1, Object.keys(finalizedCon).length);
 
-  return {
+  const result: JudgeScore = {
     ...judgeScore,
     proTeamScore: judgeScore.proTeamScore > 0 ? judgeScore.proTeamScore : proPlayerAvg,
     conTeamScore: judgeScore.conTeamScore > 0 ? judgeScore.conTeamScore : conPlayerAvg,
@@ -101,12 +136,58 @@ export const finalizeJudgeScore = (
     conPlayerScores: finalizedCon,
     submittedAt: Date.now(),
   };
+
+  if (isBPFormat(format) && judgeScore.fourTeamPlayerScores) {
+    const finalizedFourTeamPlayerScores: Record<BPRole, Record<string, PlayerScore>> = {
+      og: {}, oo: {}, cg: {}, co: {},
+    };
+    const teamAvgs: Record<BPRole, number> = { og: 0, oo: 0, cg: 0, co: 0 };
+
+    BP_ROLES.forEach((role) => {
+      const roleScores = judgeScore.fourTeamPlayerScores![role] ?? {};
+      Object.entries(roleScores).forEach(([pid, ps]) => {
+        finalizedFourTeamPlayerScores[role][pid] = {
+          ...ps,
+          total: calculatePlayerTotal(ps.criteriaScores, criteria),
+        };
+      });
+      const vals = Object.values(finalizedFourTeamPlayerScores[role]);
+      teamAvgs[role] = vals.length > 0
+        ? vals.reduce((s, p) => s + p.total, 0) / vals.length
+        : 0;
+    });
+
+    const fourTeamScores = { ...judgeScore.fourTeamScores };
+    BP_ROLES.forEach((role) => {
+      if (!fourTeamScores[role] || fourTeamScores[role] === 0) {
+        fourTeamScores[role] = Math.round(teamAvgs[role] * 10) / 10;
+      }
+    });
+
+    const ranked = BP_ROLES.slice().sort((a, b) => fourTeamScores[b] - fourTeamScores[a]);
+    const fourTeamRankings = { og: 0, oo: 0, cg: 0, co: 0 };
+    ranked.forEach((role, idx) => {
+      fourTeamRankings[role] = idx + 1;
+    });
+
+    result.fourTeamScores = fourTeamScores;
+    result.fourTeamPlayerScores = finalizedFourTeamPlayerScores;
+    result.fourTeamRankings = fourTeamRankings;
+  }
+
+  return result;
 };
 
 export const calculateMatchResult = (
   match: MatchPairing,
   judgeScores: JudgeScore[]
 ): MatchScore => {
+  const isBP = match.bpTeams != null;
+
+  if (isBP && judgeScores.some((js) => js.fourTeamScores)) {
+    return calculateBPMatchResult(match, judgeScores);
+  }
+
   const proTeamTotals = judgeScores.map((js) => js.proTeamScore);
   const conTeamTotals = judgeScores.map((js) => js.conTeamScore);
   const proTeamTotal = proTeamTotals.reduce((a, b) => a + b, 0) / Math.max(1, proTeamTotals.length);
@@ -129,12 +210,7 @@ export const calculateMatchResult = (
     });
     const totalScore = scores.reduce((a, b) => a + b, 0);
     const avgScore = totalScore / Math.max(1, scores.length);
-    return {
-      playerId,
-      totalScore,
-      avgScore,
-      mvpVotes,
-    };
+    return { playerId, totalScore, avgScore, mvpVotes };
   });
 
   let mvpPlayerId: string | undefined;
@@ -153,7 +229,102 @@ export const calculateMatchResult = (
   };
 };
 
-export const determineWinner = (score: MatchScore): 'pro' | 'con' | 'draw' => {
+const calculateBPMatchResult = (
+  match: MatchPairing,
+  judgeScores: JudgeScore[]
+): MatchScore => {
+  const roleTotals: Record<BPRole, number[]> = { og: [], oo: [], cg: [], co: [] };
+  const roleRankPoints: Record<BPRole, number[]> = { og: [], oo: [], cg: [], co: [] };
+
+  judgeScores.forEach((js) => {
+    if (!js.fourTeamScores) return;
+    BP_ROLES.forEach((role) => {
+      roleTotals[role].push(js.fourTeamScores[role]);
+      if (js.fourTeamRankings) {
+        roleRankPoints[role].push(5 - js.fourTeamRankings[role]);
+      }
+    });
+  });
+
+  const avgScores: Record<BPRole, number> = { og: 0, oo: 0, cg: 0, co: 0 };
+  BP_ROLES.forEach((role) => {
+    const arr = roleTotals[role];
+    avgScores[role] = arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+  });
+
+  const proTeamTotal = (avgScores.og + avgScores.cg) / 2;
+  const conTeamTotal = (avgScores.oo + avgScores.co) / 2;
+
+  const allPlayerIds = new Set<string>();
+  judgeScores.forEach((js) => {
+    if (js.fourTeamPlayerScores) {
+      BP_ROLES.forEach((role) => {
+        Object.keys(js.fourTeamPlayerScores[role] ?? {}).forEach((id) => allPlayerIds.add(id));
+      });
+    }
+    Object.keys(js.proPlayerScores).forEach((id) => allPlayerIds.add(id));
+    Object.keys(js.conPlayerScores).forEach((id) => allPlayerIds.add(id));
+  });
+
+  const playerScores = Array.from(allPlayerIds).map((playerId) => {
+    const scores: number[] = [];
+    judgeScores.forEach((js) => {
+      if (js.fourTeamPlayerScores) {
+        BP_ROLES.forEach((role) => {
+          const ps = js.fourTeamPlayerScores[role]?.[playerId];
+          if (ps) scores.push(ps.total);
+        });
+      }
+      const proScore = js.proPlayerScores[playerId];
+      const conScore = js.conPlayerScores[playerId];
+      if (proScore) scores.push(proScore.total);
+      if (conScore) scores.push(conScore.total);
+    });
+    const totalScore = scores.reduce((a, b) => a + b, 0);
+    const avgScore = totalScore / Math.max(1, scores.length);
+    return { playerId, totalScore, avgScore, mvpVotes: 0 };
+  });
+
+  let mvpPlayerId: string | undefined;
+  if (playerScores.length > 0) {
+    const sorted = [...playerScores].sort((a, b) => b.avgScore - a.avgScore);
+    mvpPlayerId = sorted[0].playerId;
+  }
+
+  return {
+    matchId: match.id,
+    judgeScores,
+    proTeamTotal,
+    conTeamTotal,
+    playerScores,
+    mvpPlayerId,
+  };
+};
+
+export const determineWinner = (score: MatchScore, match?: MatchPairing): 'pro' | 'con' | 'draw' => {
+  if (match?.bpTeams) {
+    const judgeScores = score.judgeScores.filter((js) => js.fourTeamRankings);
+    if (judgeScores.length === 0) {
+      if (score.proTeamTotal > score.conTeamTotal) return 'pro';
+      if (score.conTeamTotal > score.proTeamTotal) return 'con';
+      return 'draw';
+    }
+
+    const rankPoints: Record<BPRole, number> = { og: 0, oo: 0, cg: 0, co: 0 };
+    judgeScores.forEach((js) => {
+      if (!js.fourTeamRankings) return;
+      BP_ROLES.forEach((role) => {
+        rankPoints[role] += 5 - js.fourTeamRankings![role];
+      });
+    });
+
+    const proPoints = rankPoints.og + rankPoints.cg;
+    const conPoints = rankPoints.oo + rankPoints.co;
+    if (proPoints > conPoints) return 'pro';
+    if (conPoints > proPoints) return 'con';
+    return 'draw';
+  }
+
   if (score.proTeamTotal > score.conTeamTotal) return 'pro';
   if (score.conTeamTotal > score.proTeamTotal) return 'con';
   return 'draw';
@@ -180,11 +351,58 @@ export const calculateTeamRankings = (
     };
   });
 
-  let totalMatchesForTeam: Record<string, number> = {};
+  const totalMatchesForTeam: Record<string, number> = {};
   teams.forEach((t) => (totalMatchesForTeam[t.id] = 0));
 
   matches.forEach((match) => {
     if (match.status !== 'finished' || !match.scores || !match.winner) return;
+
+    if (match.bpTeams) {
+      const bp = match.bpTeams;
+      const participatingTeamIds = [bp.og, bp.oo, bp.cg, bp.co];
+      const judgeScores = match.scores.judgeScores;
+
+      participatingTeamIds.forEach((teamId) => {
+        if (!stats[teamId]) return;
+        totalMatchesForTeam[teamId]++;
+        const s = stats[teamId];
+
+        let teamScore = 0;
+        let rankPoints = 0;
+        judgeScores.forEach((js) => {
+          if (js.fourTeamScores && js.fourTeamRankings) {
+            BP_ROLES.forEach((role) => {
+              if (bp[role] === teamId) {
+                teamScore += js.fourTeamScores[role];
+                rankPoints += 5 - js.fourTeamRankings[role];
+              }
+            });
+          }
+        });
+        const avgTeamScore = judgeScores.length > 0 ? teamScore / judgeScores.length : 0;
+        s.totalScore += avgTeamScore;
+        s.ballots += rankPoints;
+      });
+
+      const firstPlaceRank = 1;
+      judgeScores.forEach((js) => {
+        if (!js.fourTeamRankings) return;
+        BP_ROLES.forEach((role) => {
+          if (js.fourTeamRankings![role] === firstPlaceRank) {
+            const teamId = bp[role];
+            if (stats[teamId]) stats[teamId].wins++;
+          } else if (js.fourTeamRankings![role] === 4) {
+            const teamId = bp[role];
+            if (stats[teamId]) stats[teamId].losses++;
+          } else {
+            const teamId = bp[role];
+            if (stats[teamId]) stats[teamId].draws++;
+          }
+        });
+      });
+      return;
+    }
+
     const { proTeamId, conTeamId, scores, winner } = match;
     const proStat = stats[proTeamId];
     const conStat = stats[conTeamId];

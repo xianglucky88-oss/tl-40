@@ -26,6 +26,8 @@ const navItems: NavItem[] = [
   { path: '/judges', name: '评委管理', icon: Gavel },
   { path: '/topics', name: '辩题库', icon: FileText },
   { path: '/tournament', name: '赛制编排', icon: Trophy },
+  { path: '/live', name: '比赛现场', icon: Timer },
+  { path: '/judge', name: '评委打分', icon: Award },
   { path: '/ranking', name: '成绩排行', icon: BarChart3 },
 ];
 

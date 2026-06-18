@@ -6,7 +6,9 @@ import JudgesPage from "@/pages/JudgesPage";
 import TopicsPage from "@/pages/TopicsPage";
 import TournamentPage from "@/pages/TournamentPage";
 import LiveMatchPage from "@/pages/LiveMatchPage";
+import LiveMatchListPage from "@/pages/LiveMatchListPage";
 import JudgeScoringPage from "@/pages/JudgeScoringPage";
+import JudgeScoringListPage from "@/pages/JudgeScoringListPage";
 import RankingPage from "@/pages/RankingPage";
 
 export default function App() {
@@ -19,7 +21,9 @@ export default function App() {
           <Route path="/judges" element={<JudgesPage />} />
           <Route path="/topics" element={<TopicsPage />} />
           <Route path="/tournament" element={<TournamentPage />} />
+          <Route path="/live" element={<LiveMatchListPage />} />
           <Route path="/live/:matchId" element={<LiveMatchPage />} />
+          <Route path="/judge" element={<JudgeScoringListPage />} />
           <Route path="/judge/:matchId" element={<JudgeScoringPage />} />
           <Route path="/ranking" element={<RankingPage />} />
           <Route path="*" element={<DashboardPage />} />

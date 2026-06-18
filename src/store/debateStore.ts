@@ -342,7 +342,7 @@ export const useDebateStore = create<DebateState>()(
         }
 
         const matchScore = calculateMatchResult(match, judgeScores);
-        const winner = determineWinner(matchScore);
+        const winner = determineWinner(matchScore, match);
 
         if (match.scores?.mvpPlayerId) {
           // ensure MVP reflected
@@ -375,6 +375,23 @@ export const useDebateStore = create<DebateState>()(
 
         const proTeam = s.teams.find((t) => t.id === match.proTeamId);
         const conTeam = s.teams.find((t) => t.id === match.conTeamId);
+
+        if (match.bpTeams && s.tournament.format === 'british_parliamentary') {
+          const bp = match.bpTeams;
+          const bpPlayers: Record<string, Player[]> = {};
+          (['og', 'oo', 'cg', 'co'] as const).forEach((role) => {
+            const team = s.teams.find((t) => t.id === bp[role]);
+            bpPlayers[role] = team?.players ?? [];
+          });
+          return createEmptyJudgeScore(
+            judgeId,
+            s.tournament.format,
+            proTeam?.players ?? [],
+            conTeam?.players ?? [],
+            bpPlayers as Record<'og' | 'oo' | 'cg' | 'co', Player[]>
+          );
+        }
+
         return createEmptyJudgeScore(
           judgeId,
           s.tournament.format,
