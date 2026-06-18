@@ -224,3 +224,20 @@ export interface AvoidanceConflict {
   reason: string;
   type: 'team' | 'institution' | 'player';
 }
+
+export interface Danmaku {
+  id: string;
+  matchId: string;
+  content: string;
+  senderName: string;
+  senderSide?: 'pro' | 'con' | 'neutral';
+  color?: string;
+  createdAt: number;
+}
+
+export interface DanmakuChannelMessage {
+  type: 'danmaku' | 'clear' | 'ping';
+  data?: Danmaku;
+  matchId: string;
+  timestamp: number;
+}

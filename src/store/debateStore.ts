@@ -11,7 +11,8 @@ import {
   Player,
   AvoidanceConflict,
   DebateFormat,
-  TournamentType,
+  Danmaku,
+  DanmakuChannelMessage,
 } from '@/types';
 import {
   buildInitialTeams,
@@ -50,6 +51,9 @@ interface DebateState {
   activeMatchId: string | null;
   judgeScoresByMatch: Record<string, JudgeScore[]>;
   lastInitialized: boolean;
+
+  danmakuList: Danmaku[];
+  danmakuEnabledByMatch: Record<string, boolean>;
 
   initIfEmpty: () => void;
   getAllJudgesSubmitted: (matchId: string) => boolean;
@@ -93,6 +97,13 @@ interface DebateState {
 
   teamRankings: () => ReturnType<typeof calculateTeamRankings>;
   playerRankings: () => ReturnType<typeof calculatePlayerRankings>;
+
+  sendDanmaku: (matchId: string, danmaku: Omit<Danmaku, 'id' | 'matchId' | 'createdAt'>) => void;
+  getDanmakuByMatch: (matchId: string) => Danmaku[];
+  setDanmakuEnabled: (matchId: string, enabled: boolean) => void;
+  isDanmakuEnabled: (matchId: string) => boolean;
+  clearDanmakuByMatch: (matchId: string) => void;
+  subscribeDanmakuChannel: (matchId: string, callback: (d: Danmaku) => void) => () => void;
 }
 
 const defaultTournament = buildInitialTournament();
@@ -100,6 +111,11 @@ const defaultTeams = buildInitialTeams(8);
 const defaultJudges = buildInitialJudges();
 const defaultTopics = buildInitialTopics();
 const defaultMatches = buildSampleMatches(defaultTeams, defaultJudges, defaultTopics, defaultTournament);
+
+const danmakuChannel =
+  typeof BroadcastChannel !== 'undefined'
+    ? new BroadcastChannel('debate-danmaku-channel')
+    : null;
 
 export const useDebateStore = create<DebateState>()(
   persist(
@@ -113,6 +129,9 @@ export const useDebateStore = create<DebateState>()(
       activeMatchId: null,
       judgeScoresByMatch: {},
       lastInitialized: false,
+
+      danmakuList: [],
+      danmakuEnabledByMatch: {},
 
       getAllJudgesSubmitted: (matchId: string): boolean => {
         const s = get();
@@ -419,6 +438,110 @@ export const useDebateStore = create<DebateState>()(
 
       teamRankings: () => calculateTeamRankings(get().matches, get().teams),
       playerRankings: () => calculatePlayerRankings(get().matches, get().teams),
+
+      sendDanmaku: (matchId, danmakuInput) => {
+        const newDanmaku: Danmaku = {
+          id: uid(),
+          matchId,
+          content: danmakuInput.content,
+          senderName: danmakuInput.senderName,
+          senderSide: danmakuInput.senderSide ?? 'neutral',
+          color: danmakuInput.color,
+          createdAt: Date.now(),
+        };
+
+        set((s) => ({
+          danmakuList: [...s.danmakuList, newDanmaku].slice(-500),
+        }));
+
+        const message: DanmakuChannelMessage = {
+          type: 'danmaku',
+          data: newDanmaku,
+          matchId,
+          timestamp: Date.now(),
+        };
+
+        danmakuChannel?.postMessage(message);
+
+        try {
+          const storageKey = 'debate-danmaku-event';
+          localStorage.setItem(storageKey, JSON.stringify({ ...message, nonce: Math.random() }));
+        } catch {
+          // ignore
+        }
+      },
+
+      getDanmakuByMatch: (matchId) => {
+        return get().danmakuList.filter((d) => d.matchId === matchId);
+      },
+
+      setDanmakuEnabled: (matchId, enabled) => {
+        set((s) => ({
+          danmakuEnabledByMatch: {
+            ...s.danmakuEnabledByMatch,
+            [matchId]: enabled,
+          },
+        }));
+      },
+
+      isDanmakuEnabled: (matchId) => {
+        const v = get().danmakuEnabledByMatch[matchId];
+        return v === undefined ? true : v;
+      },
+
+      clearDanmakuByMatch: (matchId) => {
+        set((s) => ({
+          danmakuList: s.danmakuList.filter((d) => d.matchId !== matchId),
+        }));
+
+        const message: DanmakuChannelMessage = {
+          type: 'clear',
+          matchId,
+          timestamp: Date.now(),
+        };
+
+        danmakuChannel?.postMessage(message);
+      },
+
+      subscribeDanmakuChannel: (matchId, callback) => {
+        const handleMessage = (event: MessageEvent<DanmakuChannelMessage>) => {
+          const msg = event.data;
+          if (!msg || msg.matchId !== matchId) return;
+          if (msg.type === 'danmaku' && msg.data) {
+            callback(msg.data);
+          } else if (msg.type === 'clear') {
+            // no-op for individual danmaku callback, caller manages list
+          }
+        };
+
+        const handleStorage = (e: StorageEvent) => {
+          if (e.key !== 'debate-danmaku-event' || !e.newValue) return;
+          try {
+            const msg: DanmakuChannelMessage = JSON.parse(e.newValue);
+            if (msg.matchId !== matchId) return;
+            if (msg.type === 'danmaku' && msg.data) {
+              const state = get();
+              const alreadyExists = state.danmakuList.some((d) => d.id === msg.data!.id);
+              if (!alreadyExists) {
+                set((s) => ({
+                  danmakuList: [...s.danmakuList, msg.data!].slice(-500),
+                }));
+              }
+              callback(msg.data);
+            }
+          } catch {
+            // ignore
+          }
+        };
+
+        danmakuChannel?.addEventListener('message', handleMessage);
+        window.addEventListener('storage', handleStorage);
+
+        return () => {
+          danmakuChannel?.removeEventListener('message', handleMessage);
+          window.removeEventListener('storage', handleStorage);
+        };
+      },
     }),
     {
       name: 'debate-tournament-store',
@@ -432,6 +555,8 @@ export const useDebateStore = create<DebateState>()(
         lastInitialized: state.lastInitialized,
         currentTimer: state.currentTimer,
         activeMatchId: state.activeMatchId,
+        danmakuList: state.danmakuList,
+        danmakuEnabledByMatch: state.danmakuEnabledByMatch,
       }),
     }
   )

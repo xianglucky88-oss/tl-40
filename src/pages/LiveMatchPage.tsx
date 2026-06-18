@@ -5,6 +5,8 @@ import DebateTimer from '@/components/timer/DebateTimer';
 import StageList from '@/components/timer/StageList';
 import Empty from '@/components/ui/Empty';
 import Modal from '@/components/ui/Modal';
+import QRCodeDisplay from '@/components/danmaku/QRCodeDisplay';
+import DanmakuDisplay from '@/components/danmaku/DanmakuDisplay';
 import {
   Trophy,
   Users,
@@ -134,7 +136,16 @@ export default function LiveMatchPage() {
   const conPlayers = conTeam.players.map((p) => ({ name: p.name, role: p.role }));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      <div className="absolute top-0 right-0 z-30 hidden lg:block" style={{ width: 220 }}>
+        {matchId && (
+          <QRCodeDisplay
+            matchId={matchId}
+            matchTitle={`${proTeam.name} vs ${conTeam.name}`}
+          />
+        )}
+      </div>
+
       {endError && (
         <div className="flex items-start gap-3 p-4 rounded-xl bg-red-50 border border-red-200 animate-fade-up">
           <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
@@ -148,7 +159,7 @@ export default function LiveMatchPage() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-3 mb-2">
+      <div className="flex flex-wrap items-center gap-3 mb-2 lg:pr-[240px]">
         <button onClick={() => navigate(-1)} className="btn-secondary !px-3 !py-2">← 返回</button>
         <div className="flex items-center gap-2">
           <span className="badge-gold">第{match.round}轮 · #{match.matchNumber}</span>
@@ -156,8 +167,17 @@ export default function LiveMatchPage() {
           {match.status === 'ongoing' && <span className="badge-gold"><Swords className="w-3 h-3" />进行中</span>}
           {match.status === 'finished' && <span className="badge-green"><Trophy className="w-3 h-3" />已结束</span>}
         </div>
-        <div className="ml-auto flex gap-2">
-          <div className="text-sm text-navy-500 mr-2 self-center">
+        <div className="ml-auto flex gap-2 items-center">
+          <div className="lg:hidden">
+            {matchId && (
+              <QRCodeDisplay
+                matchId={matchId}
+                matchTitle={`${proTeam.name} vs ${conTeam.name}`}
+                size={120}
+              />
+            )}
+          </div>
+          <div className="text-sm text-navy-500 self-center">
             已提交 <span className="font-bold text-navy-800">{judgeScores.length}</span> / {match.judgeIds.length} 位评委
           </div>
           {!isFinished && (
@@ -176,7 +196,7 @@ export default function LiveMatchPage() {
         </div>
       </div>
 
-      <div className="flex items-stretch gap-4">
+      <div className="flex items-stretch gap-4 lg:pr-[240px]">
         <TeamPanel
           side="pro"
           teamName={proTeam.name}
@@ -222,7 +242,7 @@ export default function LiveMatchPage() {
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-5">
+      <div className="grid grid-cols-2 gap-5 lg:pr-[240px]">
         <div className="card p-6">
           <div className="flex items-center gap-2 mb-4">
             <Clock className="w-4 h-4 text-gold-500" />
@@ -232,6 +252,12 @@ export default function LiveMatchPage() {
         </div>
         <StageList />
       </div>
+
+      {matchId && (
+        <div className="lg:pr-[240px]">
+          <DanmakuDisplay matchId={matchId} />
+        </div>
+      )}
 
       {isFinished && match.scores && (
         <div className="card p-6 bg-gradient-to-br from-gold-50/50 to-white">
