@@ -21,14 +21,12 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { path: '/', name: '仪表盘', icon: LayoutDashboard },
-  { path: '/teams', name: 'teams', icon: Users },
-  { path: '/judges', name: 'judges', icon: Gavel },
-  { path: '/topics', name: 'topics', icon: FileText },
-  { path: '/tournament', name: 'tournament', icon: Trophy },
-  { path: '/live', name: 'live', icon: Timer },
-  { path: '/scoring', name: 'scoring', icon: Award },
-  { path: '/ranking', name: 'ranking', icon: BarChart3 },
+  { path: '/', name: '赛事概览', icon: LayoutDashboard },
+  { path: '/teams', name: '参赛队伍', icon: Users },
+  { path: '/judges', name: '评委管理', icon: Gavel },
+  { path: '/topics', name: '辩题库', icon: FileText },
+  { path: '/tournament', name: '赛制编排', icon: Trophy },
+  { path: '/ranking', name: '成绩排行', icon: BarChart3 },
 ];
 
 interface SidebarProps {

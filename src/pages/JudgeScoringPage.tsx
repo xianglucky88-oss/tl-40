@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import {
   Award, MessageSquare, CheckCircle2, Users, ChevronDown,
   Sparkles, Send, Scale, Trophy, User, Scroll,
+  ArrowLeft,
 } from 'lucide-react';
 import { useDebateStore } from '@/store/debateStore';
 import { FORMAT_RULES } from '@/engines/formatRules';
@@ -94,6 +95,21 @@ export default function JudgeScoringPage() {
 
   return (
     <div className="space-y-6 pb-16">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => {
+            if (matchId) {
+              window.location.href = `/live/${matchId}`;
+            } else {
+              window.history.back();
+            }
+          }}
+          className="btn-secondary !px-3 !py-2"
+        >
+          <ArrowLeft className="w-4 h-4" />返回比赛现场
+        </button>
+      </div>
+
       {showSuccess && (
         <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
           <div className="bg-gradient-navy rounded-2xl shadow-card-hover px-10 py-8 text-white animate-scale-in">

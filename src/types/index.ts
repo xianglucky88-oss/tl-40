@@ -4,6 +4,15 @@ export type MatchStatus = 'pending' | 'ongoing' | 'finished';
 export type Side = 'pro' | 'con' | 'both' | 'judge';
 export type Winner = 'pro' | 'con' | 'draw';
 
+export type BPRole = 'og' | 'oo' | 'cg' | 'co'; // 正方上院/反方上院/正方下院/反方下院
+
+export interface BPTeamAssignment {
+  og: string; // 正方上院 teamId
+  oo: string; // 反方上院 teamId
+  cg: string; // 正方下院 teamId
+  co: string; // 反方下院 teamId
+}
+
 export interface Player {
   id: string;
   name: string;
@@ -53,6 +62,7 @@ export interface DebateStageConfig {
     enabled: boolean;
     duration?: number;
   };
+  bpRole?: 'og' | 'oo' | 'cg' | 'co';
 }
 
 export interface ScoringCriterion {
@@ -70,6 +80,7 @@ export interface FormatRules {
   stages: DebateStageConfig[];
   scoringCriteria: ScoringCriterion[];
   teamScoreMax: number;
+  isFourTeamFormat?: boolean; // BP赛制为true，支持4队（OG/OO/CG/CO）
 }
 
 export interface TournamentConfig {
@@ -102,6 +113,25 @@ export interface JudgeScore {
     general?: string;
   };
   submittedAt: number;
+  // BP四队制专用字段
+  fourTeamScores?: {
+    og: number;
+    oo: number;
+    cg: number;
+    co: number;
+  };
+  fourTeamPlayerScores?: {
+    og: Record<string, PlayerScore>;
+    oo: Record<string, PlayerScore>;
+    cg: Record<string, PlayerScore>;
+    co: Record<string, PlayerScore>;
+  };
+  fourTeamRankings?: {
+    og: number; // 1-4名
+    oo: number;
+    cg: number;
+    co: number;
+  };
 }
 
 export interface PlayerMatchScore {
@@ -135,6 +165,8 @@ export interface MatchPairing {
   startedAt?: number;
   finishedAt?: number;
   currentStageIndex?: number;
+  // BP四队制专用字段
+  bpTeams?: BPTeamAssignment;
 }
 
 export interface PlayerScoreRecord {

@@ -6,6 +6,9 @@ import {
   Users,
   Trash2,
   X,
+  FileText,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 import { useDebateStore } from '@/store/debateStore';
 import { uid } from '@/engines/scoringEngine';
@@ -27,11 +30,60 @@ function createEmptyPlayers(): FormPlayer[] {
   return ROLES.map((r) => ({ name: '', role: r, contact: '' }));
 }
 
+interface ParsedTeam {
+  name: string;
+  institution: string;
+  seed?: number;
+  players: { name: string; role: PlayerRole; contact?: string }[];
+}
+
+const parseBulkInput = (text: string): { teams: ParsedTeam[]; errors: string[] } => {
+  const teams: ParsedTeam[] = [];
+  const errors: string[] = [];
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  let currentTeam: ParsedTeam | null = null;
+  let playerIndex = 0;
+
+  lines.forEach((rawLine, lineIdx) => {
+    const line = rawLine.replace(/[，,]/g, '\t').split('\t').map((s) => s.trim()).filter(Boolean);
+    if (line.length === 0) return;
+
+    if (line.length >= 2 && line[0] && !ROLES.includes(line[0] as PlayerRole)) {
+      if (currentTeam) teams.push(currentTeam);
+      const name = line[0] || '';
+      const institution = line[1] || '';
+      const seed = line[2] ? parseInt(line[2]) || undefined : undefined;
+      currentTeam = {
+        name,
+        institution,
+        seed,
+        players: [],
+      };
+      playerIndex = 0;
+      if (!name) errors.push(`第${lineIdx + 1}行：队伍名称不能为空`);
+      if (!institution) errors.push(`第${lineIdx + 1}行：所属学校不能为空`);
+    } else if (currentTeam && (ROLES.includes(line[0] as PlayerRole) || line[0])) {
+      const role = ROLES.includes(line[0] as PlayerRole)
+        ? (line[0] as PlayerRole)
+        : (ROLES[playerIndex] ?? '一辩');
+      const pName = ROLES.includes(line[0] as PlayerRole) ? (line[1] || '') : (line[0] || '');
+      const contact = line.length > 2 ? line[2] : (line.length > 1 && !ROLES.includes(line[0] as PlayerRole) ? line[1] : '');
+      if (pName) {
+        currentTeam.players.push({ name: pName, role, contact: contact || undefined });
+        playerIndex = (playerIndex + 1) % 4;
+      }
+    }
+  });
+  if (currentTeam) teams.push(currentTeam);
+  return { teams, errors };
+};
+
 export default function TeamsPage() {
   const teams = useDebateStore((s) => s.teams);
   const addTeam = useDebateStore((s) => s.addTeam);
   const updateTeam = useDebateStore((s) => s.updateTeam);
   const removeTeam = useDebateStore((s) => s.removeTeam);
+  const bulkAddTeams = useDebateStore((s) => s.bulkAddTeams);
 
   const [keyword, setKeyword] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -41,6 +93,38 @@ export default function TeamsPage() {
   const [seed, setSeed] = useState<number>(1);
   const [players, setPlayers] = useState<FormPlayer[]>(createEmptyPlayers());
   const [confirmDel, setConfirmDel] = useState<Team | null>(null);
+
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkText, setBulkText] = useState('');
+  const [bulkParsed, setBulkParsed] = useState<ParsedTeam[] | null>(null);
+  const [bulkErrors, setBulkErrors] = useState<string[]>([]);
+
+  const handleBulkParse = () => {
+    const result = parseBulkInput(bulkText);
+    setBulkParsed(result.teams);
+    setBulkErrors(result.errors);
+  };
+
+  const handleBulkImport = () => {
+    if (!bulkParsed || bulkParsed.length === 0) return;
+    const validTeams = bulkParsed.map((t) => ({
+      name: t.name,
+      institution: t.institution,
+      seed: t.seed ?? teams.length + bulkParsed.indexOf(t) + 1,
+      players: t.players.map((p) => ({
+        id: uid(),
+        name: p.name,
+        role: p.role,
+        contact: p.contact,
+        scores: [],
+      })),
+    }));
+    bulkAddTeams(validTeams);
+    setBulkOpen(false);
+    setBulkText('');
+    setBulkParsed(null);
+    setBulkErrors([]);
+  };
 
   const validTeams = useMemo(() => teams.filter((t) => !t.id.startsWith('__')), [teams]);
 
@@ -153,7 +237,15 @@ export default function TeamsPage() {
           <button onClick={openAdd} className="btn-primary">
             <Plus className="w-4 h-4" />新增队伍
           </button>
-          <button className="btn-secondary">
+          <button
+            className="btn-secondary"
+            onClick={() => {
+              setBulkOpen(true);
+              setBulkText('');
+              setBulkParsed(null);
+              setBulkErrors([]);
+            }}
+          >
             <Upload className="w-4 h-4" />批量导入
           </button>
         </div>
@@ -309,6 +401,90 @@ export default function TeamsPage() {
               删除后无法恢复，相关比赛数据也可能受到影响。
             </p>
           </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        title="批量导入队伍"
+        footer={
+          <>
+            <button onClick={() => setBulkOpen(false)} className="btn-secondary">
+              取消
+            </button>
+            <button
+              onClick={handleBulkParse}
+              className="btn-secondary"
+              disabled={!bulkText.trim()}
+            >
+              <FileText className="w-4 h-4" />解析数据
+            </button>
+            <button
+              onClick={handleBulkImport}
+              className="btn-primary"
+              disabled={!bulkParsed || bulkParsed.length === 0}
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              导入 {bulkParsed?.length ?? 0} 支队伍
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="label-base">导入格式说明</label>
+            <div className="bg-ivory-100 rounded-lg p-3 text-xs text-navy-600 space-y-1.5 font-mono">
+              <p>每行一个队伍或选手，用逗号、Tab或空格分隔：</p>
+              <p>• 队伍行：<span className="font-bold">队伍名称, 所属学校, 种子排位(可选)</span></p>
+              <p>• 选手行：<span className="font-bold">辩位, 姓名, 联系方式(可选)</span></p>
+              <p>• 或选手行直接：<span className="font-bold">选手姓名, 联系方式</span>（自动分配辩位）</p>
+            </div>
+          </div>
+          <div>
+            <label className="label-base">粘贴队伍数据</label>
+            <textarea
+              rows={10}
+              className="input-base resize-none font-mono text-sm"
+              value={bulkText}
+              onChange={(e) => setBulkText(e.target.value)}
+              placeholder={`示例：\n青锋队, 北京大学, 1\n一辩, 张三, zhangsan@pku.edu\n二辩, 李四\n三辩, 王五\n四辩, 赵六\n\n明辩队, 清华大学, 2\n一辩, 钱七\n二辩, 孙八\n...`}
+            />
+          </div>
+
+          {bulkErrors.length > 0 && (
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-red-50 border border-red-200">
+              <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+              <div className="text-xs text-red-700 space-y-0.5">
+                <p className="font-semibold">解析发现 {bulkErrors.length} 个问题：</p>
+                {bulkErrors.slice(0, 5).map((e, i) => (
+                  <p key={i}>• {e}</p>
+                ))}
+                {bulkErrors.length > 5 && <p>• ... 还有 {bulkErrors.length - 5} 个问题</p>}
+              </div>
+            </div>
+          )}
+
+          {bulkParsed && bulkParsed.length > 0 && (
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-emerald-50 border border-emerald-200">
+              <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+              <div className="text-xs text-emerald-800 space-y-0.5 flex-1">
+                <p className="font-semibold">解析成功！共 {bulkParsed.length} 支队伍</p>
+                <div className="max-h-40 overflow-y-auto space-y-1.5 pr-2 scroll-thin">
+                  {bulkParsed.map((t, i) => (
+                    <div key={i} className="bg-white/60 rounded px-2 py-1.5">
+                      <span className="font-medium text-navy-800">{t.name}</span>
+                      <span className="text-navy-500 mx-1">·</span>
+                      <span className="text-navy-600">{t.institution}</span>
+                      <span className="text-navy-400 ml-2">
+                        ({t.players.map((p) => p.name).join('、')})
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </Modal>
     </div>

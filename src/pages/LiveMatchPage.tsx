@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDebateStore } from '@/store/debateStore';
 import DebateTimer from '@/components/timer/DebateTimer';
 import StageList from '@/components/timer/StageList';
 import Empty from '@/components/ui/Empty';
+import Modal from '@/components/ui/Modal';
 import {
   Trophy,
   Users,
@@ -13,6 +14,9 @@ import {
   ArrowRight,
   Swords,
   Star,
+  X,
+  AlertTriangle,
+  StopCircle,
 } from 'lucide-react';
 import type { JudgeScore } from '@/types';
 
@@ -97,6 +101,31 @@ export default function LiveMatchPage() {
   const isFinished = match?.status === 'finished';
   const mvpPlayer = useMemo(() => match?.scores?.mvpPlayerId ? getPlayerById(match.scores.mvpPlayerId) : null, [match, getPlayerById]);
 
+  const getAllJudgesSubmitted = useDebateStore((s) => s.getAllJudgesSubmitted);
+  const getUnsubmittedJudges = useDebateStore((s) => s.getUnsubmittedJudges);
+  const finalizeMatch = useDebateStore((s) => s.finalizeMatch);
+  const setTimer = useDebateStore((s) => s.setTimer);
+  const currentTimer = useDebateStore((s) => s.currentTimer);
+
+  const [confirmEndOpen, setConfirmEndOpen] = useState(false);
+  const [endError, setEndError] = useState<string | null>(null);
+
+  const allSubmitted = matchId ? getAllJudgesSubmitted(matchId) : false;
+  const unsubmitted = matchId ? getUnsubmittedJudges(matchId) : [];
+
+  const handleEndMatch = () => {
+    if (!matchId) return;
+    const result = finalizeMatch(matchId);
+    if (!result.success && result.error) {
+      setEndError(result.error);
+    } else {
+      setConfirmEndOpen(false);
+      if (currentTimer) {
+        setTimer({ ...currentTimer, isRunning: false, isFinished: true });
+      }
+    }
+  };
+
   if (!match || !proTeam || !conTeam || !topic) {
     return <Empty title="比赛不存在" description="未找到该场比赛的信息，请返回上一页重试" />;
   }
@@ -106,13 +135,44 @@ export default function LiveMatchPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3 mb-2">
+      {endError && (
+        <div className="flex items-start gap-3 p-4 rounded-xl bg-red-50 border border-red-200 animate-fade-up">
+          <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-medium text-red-800 mb-0.5">无法结束比赛</p>
+            <p className="text-sm text-red-600">{endError}</p>
+          </div>
+          <button onClick={() => setEndError(null)} className="text-red-400 hover:text-red-600">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-3 mb-2">
         <button onClick={() => navigate(-1)} className="btn-secondary !px-3 !py-2">← 返回</button>
         <div className="flex items-center gap-2">
           <span className="badge-gold">第{match.round}轮 · #{match.matchNumber}</span>
           {match.status === 'pending' && <span className="badge-blue">待开始</span>}
           {match.status === 'ongoing' && <span className="badge-gold"><Swords className="w-3 h-3" />进行中</span>}
           {match.status === 'finished' && <span className="badge-green"><Trophy className="w-3 h-3" />已结束</span>}
+        </div>
+        <div className="ml-auto flex gap-2">
+          <div className="text-sm text-navy-500 mr-2 self-center">
+            已提交 <span className="font-bold text-navy-800">{judgeScores.length}</span> / {match.judgeIds.length} 位评委
+          </div>
+          {!isFinished && (
+            <button
+              onClick={() => {
+                setEndError(null);
+                setConfirmEndOpen(true);
+              }}
+              disabled={!allSubmitted}
+              className={allSubmitted ? 'btn-gold' : 'btn-secondary opacity-60 cursor-not-allowed'}
+              title={!allSubmitted ? '所有评委提交评分后才能结束比赛' : ''}
+            >
+              <StopCircle className="w-4 h-4" />结束比赛
+            </button>
+          )}
         </div>
       </div>
 
@@ -259,6 +319,62 @@ export default function LiveMatchPage() {
           })}
         </div>
       </div>
+
+      <Modal
+        open={confirmEndOpen}
+        onClose={() => setConfirmEndOpen(false)}
+        title="确认结束比赛"
+        footer={
+          <>
+            <button onClick={() => setConfirmEndOpen(false)} className="btn-secondary">
+              取消
+            </button>
+            <button
+              onClick={handleEndMatch}
+              disabled={!allSubmitted}
+              className={allSubmitted ? 'btn-gold' : 'btn-secondary opacity-50 cursor-not-allowed'}
+            >
+              <CheckCircle2 className="w-4 h-4" />确认结束
+            </button>
+          </>
+        }
+      >
+        <div className="py-2 space-y-4">
+          {!allSubmitted && (
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-red-50 border border-red-200">
+              <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-red-800 mb-1">还有评委未提交评分</p>
+                <p className="text-sm text-red-600">
+                  未提交：{unsubmitted.map((jid) => getJudgeById(jid)?.name).filter(Boolean).join('、')}
+                </p>
+              </div>
+            </div>
+          )}
+          {allSubmitted && (
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-emerald-50 border border-emerald-200">
+              <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-emerald-800 mb-1">所有评委已提交评分</p>
+                <p className="text-sm text-emerald-600">
+                  共 {match.judgeIds.length} 位评委，评分全部提交完成，可以结束比赛
+                </p>
+              </div>
+            </div>
+          )}
+          <div>
+            <p className="text-sm text-navy-700 font-medium mb-2">比赛信息</p>
+            <div className="bg-ivory-100 rounded-lg p-4 space-y-1 text-sm">
+              <p><span className="text-navy-500">对阵：</span>{proTeam.name} vs {conTeam.name}</p>
+              <p><span className="text-navy-500">辩题：</span>{topic.title}</p>
+              <p><span className="text-navy-500">场次：</span>第{match.round}轮 · 第{match.matchNumber}场</p>
+            </div>
+          </div>
+          <p className="text-xs text-navy-500">
+            结束后将自动计算比赛结果、生成排名，且无法重新开始计时。请确认。
+          </p>
+        </div>
+      </Modal>
     </div>
   );
 }

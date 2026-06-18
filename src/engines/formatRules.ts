@@ -6,9 +6,10 @@ const STAGE = (
   duration: number,
   side?: 'pro' | 'con' | 'both' | 'judge',
   speakerIndex?: number,
-  crossExamine?: { enabled: boolean; duration?: number }
+  crossExamine?: { enabled: boolean; duration?: number },
+  bpRole?: 'og' | 'oo' | 'cg' | 'co'
 ): DebateStageConfig => ({
-  id, name, duration, side, speakerIndex, crossExamine
+  id, name, duration, side, speakerIndex, crossExamine, bpRole
 });
 
 const CRITERION = (
@@ -61,7 +62,8 @@ export const FORMAT_RULES: Record<DebateFormat, FormatRules> = {
       STAGE('pro_cross2', '正方三辩质询反方二辩', 2 * 60, 'pro', 2),
       STAGE('pro3', '正方三辩盘问小结', 2 * 60, 'pro', 2),
       STAGE('con3', '反方三辩盘问小结', 2 * 60, 'con', 2),
-      STAGE('freedebate', '自由辩论（双方各4分钟）', 8 * 60, 'both'),
+      STAGE('free_pro', '自由辩论 · 正方（4分钟）', 4 * 60, 'pro'),
+      STAGE('free_con', '自由辩论 · 反方（4分钟）', 4 * 60, 'con'),
       STAGE('con4', '反方四辩结辩', 3 * 60, 'con', 3),
       STAGE('pro4', '正方四辩结辩', 3 * 60, 'pro', 3),
     ],
@@ -96,15 +98,16 @@ export const FORMAT_RULES: Record<DebateFormat, FormatRules> = {
     label: '英国议会制（BP赛制）',
     description: '四队制辩论：正方上院/下院、反方上院/下院，各队2人',
     teamScoreMax: 100,
+    isFourTeamFormat: true,
     stages: [
-      STAGE('pm', '首相（正方上院1）', 7 * 60, 'pro', 0),
-      STAGE('lo', '反对党领袖（反方上院1）', 7 * 60, 'con', 0),
-      STAGE('dpm', '副首相（正方上院2）', 7 * 60, 'pro', 1),
-      STAGE('dlo', '反对党副领袖（反方上院2）', 7 * 60, 'con', 1),
-      STAGE('mg', '政府成员（正方下院1）', 7 * 60, 'pro', 2),
-      STAGE('ow', '反对党成员（反方下院1）', 7 * 60, 'con', 2),
-      STAGE('gw', '政府党鞭（正方下院2）', 7 * 60, 'pro', 3),
-      STAGE('ol', '反对党党鞭（反方下院2）', 7 * 60, 'con', 3),
+      STAGE('pm', '首相 · 正方上院1', 7 * 60, 'pro', 0, undefined, 'og'),
+      STAGE('lo', '反对党领袖 · 反方上院1', 7 * 60, 'con', 0, undefined, 'oo'),
+      STAGE('dpm', '副首相 · 正方上院2', 7 * 60, 'pro', 1, undefined, 'og'),
+      STAGE('dlo', '反对党副领袖 · 反方上院2', 7 * 60, 'con', 1, undefined, 'oo'),
+      STAGE('mg', '政府成员 · 正方下院1', 7 * 60, 'pro', 0, undefined, 'cg'),
+      STAGE('ow', '反对党成员 · 反方下院1', 7 * 60, 'con', 0, undefined, 'co'),
+      STAGE('gw', '政府党鞭 · 正方下院2', 7 * 60, 'pro', 1, undefined, 'cg'),
+      STAGE('ol', '反对党党鞭 · 反方下院2', 7 * 60, 'con', 1, undefined, 'co'),
     ],
     scoringCriteria: [
       CRITERION('argument', '论点质量', 30, 0.3, '论点的创新性与价值'),

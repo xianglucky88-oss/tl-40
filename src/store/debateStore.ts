@@ -52,6 +52,8 @@ interface DebateState {
   lastInitialized: boolean;
 
   initIfEmpty: () => void;
+  getAllJudgesSubmitted: (matchId: string) => boolean;
+  getUnsubmittedJudges: (matchId: string) => string[];
 
   setActiveMatch: (matchId: string | null) => void;
   initTimer: (format: DebateFormat, stageIndex?: number) => void;
@@ -78,7 +80,7 @@ interface DebateState {
   checkMatchConflicts: (matchId: string) => AvoidanceConflict[];
 
   submitJudgeScore: (matchId: string, judgeId: string, score: JudgeScore) => void;
-  finalizeMatch: (matchId: string) => void;
+  finalizeMatch: (matchId: string) => { success: boolean; error?: string };
   getOrCreateJudgeScore: (matchId: string, judgeId: string) => JudgeScore;
 
   getTeamById: (id: string) => Team | undefined;
@@ -111,6 +113,23 @@ export const useDebateStore = create<DebateState>()(
       activeMatchId: null,
       judgeScoresByMatch: {},
       lastInitialized: false,
+
+      getAllJudgesSubmitted: (matchId: string): boolean => {
+        const s = get();
+        const match = s.matches.find((m) => m.id === matchId);
+        if (!match) return false;
+        const submitted = s.judgeScoresByMatch[matchId] ?? [];
+        return submitted.length >= match.judgeIds.length && match.judgeIds.length > 0;
+      },
+
+      getUnsubmittedJudges: (matchId: string): string[] => {
+        const s = get();
+        const match = s.matches.find((m) => m.id === matchId);
+        if (!match) return [];
+        const submitted = s.judgeScoresByMatch[matchId] ?? [];
+        const submittedIds = new Set(submitted.map((s) => s.judgeId));
+        return match.judgeIds.filter((jid) => !submittedIds.has(jid));
+      },
 
       initIfEmpty: () => {
         if (get().lastInitialized) return;
@@ -305,10 +324,22 @@ export const useDebateStore = create<DebateState>()(
       finalizeMatch: (matchId) => {
         const s = get();
         const judgeScores = s.judgeScoresByMatch[matchId] ?? [];
-        if (judgeScores.length === 0) return;
-
         const match = s.matches.find((m) => m.id === matchId);
-        if (!match) return;
+        if (!match) return { success: false, error: '比赛不存在' };
+
+        if (judgeScores.length === 0) {
+          return { success: false, error: '暂无评委提交评分，无法结束比赛' };
+        }
+        if (judgeScores.length < match.judgeIds.length) {
+          const unsubmitted = s.getUnsubmittedJudges(matchId)
+            .map((jid) => s.getJudgeById(jid)?.name)
+            .filter(Boolean)
+            .join('、');
+          return {
+            success: false,
+            error: `还有 ${match.judgeIds.length - judgeScores.length} 位评委未提交评分：${unsubmitted}`,
+          };
+        }
 
         const matchScore = calculateMatchResult(match, judgeScores);
         const winner = determineWinner(matchScore);
@@ -330,6 +361,7 @@ export const useDebateStore = create<DebateState>()(
               : m
           ),
         }));
+        return { success: true };
       },
 
       getOrCreateJudgeScore: (matchId, judgeId) => {
@@ -381,6 +413,8 @@ export const useDebateStore = create<DebateState>()(
         matches: state.matches,
         judgeScoresByMatch: state.judgeScoresByMatch,
         lastInitialized: state.lastInitialized,
+        currentTimer: state.currentTimer,
+        activeMatchId: state.activeMatchId,
       }),
     }
   )
