@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
-import { Search, Plus, Pencil, Trash2, BookOpen, Check, ChevronDown, Star } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Plus, Pencil, Trash2, BookOpen, Check, ChevronDown, Star, BarChart3 } from 'lucide-react';
 import { useDebateStore } from '@/store/debateStore';
 import Modal from '@/components/ui/Modal';
 import Empty from '@/components/ui/Empty';
@@ -101,6 +102,7 @@ interface TopicFormState {
 const emptyForm: TopicFormState = { title: '', proSide: '', conSide: '', category: [], formats: [], difficulty: 3 };
 
 export default function TopicsPage() {
+  const navigate = useNavigate();
   const { topics, addTopic, updateTopic, removeTopic } = useDebateStore();
   const [keyword, setKeyword] = useState('');
   const [catFilter, setCatFilter] = useState<TopicCategory | ''>('');
@@ -157,9 +159,14 @@ export default function TopicsPage() {
             <p className="text-sm text-navy-500">共 {topics.length} 道辩题</p>
           </div>
         </div>
-        <button onClick={openAdd} className="btn-primary">
-          <Plus className="h-4 w-4" />新增辩题
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => navigate('/topics/analytics')} className="btn-secondary">
+            <BarChart3 className="h-4 w-4" />热度分析
+          </button>
+          <button onClick={openAdd} className="btn-primary">
+            <Plus className="h-4 w-4" />新增辩题
+          </button>
+        </div>
       </div>
 
       <div className="card space-y-4 p-4">
