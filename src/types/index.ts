@@ -209,6 +209,7 @@ export interface PlayerMatchRecord {
   matchNumber: number;
   topicTitle: string;
   side: 'pro' | 'con';
+  actualRole: string;
   teamName: string;
   opponentTeamName: string;
   score: number;

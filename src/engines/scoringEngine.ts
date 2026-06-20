@@ -511,14 +511,155 @@ import type {
   PlayerScoreTrend,
   Topic,
   TournamentConfig,
+  ArchivedTournament,
+  ArchivedMatch,
+  ArchivedTeam,
 } from '@/types';
+
+const POSITION_ROLES = ['一辩', '二辩', '三辩', '四辩'] as const;
+
+const inferRoleFromPosition = (playerIndex: number): string => {
+  if (playerIndex >= 0 && playerIndex < POSITION_ROLES.length) {
+    return POSITION_ROLES[playerIndex];
+  }
+  return '替补';
+};
+
+const findPlayerRoleInTeam = (
+  playerId: string,
+  team: Team | undefined
+): string => {
+  if (!team) return '替补';
+  const idx = team.players.findIndex((p) => p.id === playerId);
+  if (idx === -1) return '替补';
+  return team.players[idx].role || inferRoleFromPosition(idx);
+};
+
+const processCurrentMatch = (
+  match: MatchPairing,
+  playerId: string,
+  team: Team,
+  teams: Team[],
+  topics: Topic[],
+  tournament: TournamentConfig
+): { record: PlayerMatchRecord; role: string } | null => {
+  const scores = match.scores;
+  if (!scores) return null;
+
+  const playerScoreEntry = scores.playerScores.find(
+    (ps) => ps.playerId === playerId
+  );
+  if (!playerScoreEntry) return null;
+
+  const isPro = match.proTeamId === team.id;
+  const isCon = match.conTeamId === team.id;
+  if (!isPro && !isCon) return null;
+
+  const side: 'pro' | 'con' = isPro ? 'pro' : 'con';
+  const opponentTeamId = isPro ? match.conTeamId : match.proTeamId;
+  const opponentTeam = teams.find((t) => t.id === opponentTeamId);
+  const topic = topics.find((t) => t.id === match.topicId);
+
+  const isWin = match.winner === side;
+  const isDraw = match.winner === 'draw';
+  const isMVP = scores.mvpPlayerId === playerId;
+
+  const actualRole = findPlayerRoleInTeam(playerId, team);
+
+  return {
+    record: {
+      matchId: match.id,
+      tournamentId: tournament.id,
+      tournamentName: tournament.name,
+      round: match.round,
+      matchNumber: match.matchNumber,
+      topicTitle: topic?.title ?? '未知辩题',
+      side,
+      actualRole,
+      teamName: team.name,
+      opponentTeamName: opponentTeam?.name ?? '未知队伍',
+      score: playerScoreEntry.avgScore,
+      isMVP,
+      isWin,
+      isDraw,
+      date: match.finishedAt ?? 0,
+    },
+    role: actualRole,
+  };
+};
+
+const findArchivedPlayerRole = (
+  playerName: string,
+  archivedTeam: ArchivedTeam
+): string => {
+  const idx = archivedTeam.players.findIndex((p) => p.name === playerName);
+  if (idx === -1) return '替补';
+  return archivedTeam.players[idx].role || inferRoleFromPosition(idx);
+};
+
+const processArchivedMatch = (
+  archivedMatch: ArchivedMatch,
+  playerName: string,
+  archivedTeam: ArchivedTeam,
+  archivedTournament: ArchivedTournament
+): { record: PlayerMatchRecord; role: string } | null => {
+  const scores = archivedMatch.scores;
+  if (!scores) return null;
+
+  const archivedPlayer = archivedTeam.players.find(
+    (p) => p.name === playerName
+  );
+  if (!archivedPlayer) return null;
+
+  const playerScoreEntry = scores.playerScores.find(
+    (ps) => ps.playerId === archivedPlayer.id
+  );
+  if (!playerScoreEntry) return null;
+
+  const isPro = archivedMatch.proTeamId === archivedTeam.id;
+  const isCon = archivedMatch.conTeamId === archivedTeam.id;
+  if (!isPro && !isCon) return null;
+
+  const side: 'pro' | 'con' = isPro ? 'pro' : 'con';
+  const opponentTeamName = isPro
+    ? archivedMatch.conTeamName
+    : archivedMatch.proTeamName;
+
+  const isWin = archivedMatch.winner === side;
+  const isDraw = archivedMatch.winner === 'draw';
+  const isMVP = scores.mvpPlayerId === archivedPlayer.id;
+
+  const actualRole = findArchivedPlayerRole(playerName, archivedTeam);
+
+  return {
+    record: {
+      matchId: archivedMatch.id,
+      tournamentId: archivedTournament.id,
+      tournamentName: archivedTournament.name,
+      round: archivedMatch.round,
+      matchNumber: archivedMatch.matchNumber,
+      topicTitle: archivedMatch.topicTitle || '未知辩题',
+      side,
+      actualRole,
+      teamName: archivedTeam.name,
+      opponentTeamName,
+      score: playerScoreEntry.avgScore,
+      isMVP,
+      isWin,
+      isDraw,
+      date: archivedMatch.finishedAt,
+    },
+    role: actualRole,
+  };
+};
 
 export const calculatePlayerDetail = (
   playerId: string,
   matches: MatchPairing[],
   teams: Team[],
   topics: Topic[],
-  tournament: TournamentConfig
+  tournament: TournamentConfig,
+  archivedTournaments: ArchivedTournament[] = []
 ): PlayerDetail | null => {
   let player: Player | undefined;
   let team: Team | undefined;
@@ -542,27 +683,7 @@ export const calculatePlayerDetail = (
   let lowestScore = Infinity;
   const roleStatMap: Record<string, { total: number; count: number }> = {};
 
-  const finishedMatches = matches.filter((m) => m.status === 'finished' && m.scores);
-
-  finishedMatches.forEach((match) => {
-    const scores = match.scores!;
-    const playerScoreEntry = scores.playerScores.find((ps) => ps.playerId === playerId);
-    if (!playerScoreEntry) return;
-
-    const isPro = match.proTeamId === team.id;
-    const isCon = match.conTeamId === team.id;
-    if (!isPro && !isCon) return;
-
-    const side: 'pro' | 'con' = isPro ? 'pro' : 'con';
-    const opponentTeamId = isPro ? match.conTeamId : match.proTeamId;
-    const opponentTeam = teams.find((t) => t.id === opponentTeamId);
-    const topic = topics.find((t) => t.id === match.topicId);
-
-    const isWin = match.winner === side;
-    const isDraw = match.winner === 'draw';
-    const isMVP = scores.mvpPlayerId === playerId;
-
-    const score = playerScoreEntry.avgScore;
+  const accumulateStats = (score: number, role: string, isWin: boolean, isDraw: boolean, isMVP: boolean) => {
     totalScore += score;
     if (score > highestScore) highestScore = score;
     if (score < lowestScore) lowestScore = score;
@@ -571,30 +692,34 @@ export const calculatePlayerDetail = (
     else if (isDraw) draws++;
     else losses++;
 
-    const role = player!.role;
     if (!roleStatMap[role]) {
       roleStatMap[role] = { total: 0, count: 0 };
     }
     roleStatMap[role].total += score;
     roleStatMap[role].count++;
+  };
 
-    matchRecords.push({
-      matchId: match.id,
-      tournamentId: tournament.id,
-      tournamentName: tournament.name,
-      round: match.round,
-      matchNumber: match.matchNumber,
-      topicTitle: topic?.title ?? '未知辩题',
-      side,
-      teamName: team.name,
-      opponentTeamName: opponentTeam?.name ?? '未知队伍',
-      score,
-      isMVP,
-      isWin,
-      isDraw,
-      date: match.finishedAt ?? 0,
-    });
-  });
+  const finishedMatches = matches.filter((m) => m.status === 'finished' && m.scores);
+  for (const match of finishedMatches) {
+    const result = processCurrentMatch(match, playerId, team, teams, topics, tournament);
+    if (!result) continue;
+    accumulateStats(result.record.score, result.role, result.record.isWin, result.record.isDraw, result.record.isMVP);
+    matchRecords.push(result.record);
+  }
+
+  for (const archTournament of archivedTournaments) {
+    const matchingArchTeam = archTournament.teams.find((at) =>
+      at.players.some((p) => p.name === player!.name)
+    );
+    if (!matchingArchTeam) continue;
+
+    for (const archMatch of archTournament.matches) {
+      const result = processArchivedMatch(archMatch, player!.name, matchingArchTeam, archTournament);
+      if (!result) continue;
+      accumulateStats(result.record.score, result.role, result.record.isWin, result.record.isDraw, result.record.isMVP);
+      matchRecords.push(result.record);
+    }
+  }
 
   matchRecords.sort((a, b) => a.date - b.date);
 
@@ -610,12 +735,15 @@ export const calculatePlayerDetail = (
   }));
 
   const scoreTrend: PlayerScoreTrend[] = matchRecords.map((record, index) => {
-    const runningAvg = matchRecords
-      .slice(0, index + 1)
-      .reduce((sum, r) => sum + r.score, 0) / (index + 1);
+    const runningAvg =
+      matchRecords.slice(0, index + 1).reduce((sum, r) => sum + r.score, 0) /
+      (index + 1);
+    const tName = record.tournamentName.length > 6
+      ? record.tournamentName.slice(0, 6) + '…'
+      : record.tournamentName;
     return {
       matchIndex: index + 1,
-      matchLabel: `第${record.round}轮`,
+      matchLabel: `${tName} R${record.round}`,
       score: Number(record.score.toFixed(1)),
       avgScore: Number(runningAvg.toFixed(1)),
     };

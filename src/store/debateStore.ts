@@ -467,7 +467,7 @@ export const useDebateStore = create<DebateState>()(
       teamRankings: () => calculateTeamRankings(get().matches, get().teams),
       playerRankings: () => calculatePlayerRankings(get().matches, get().teams),
       getPlayerDetail: (playerId) =>
-        calculatePlayerDetail(playerId, get().matches, get().teams, get().topics, get().tournament),
+        calculatePlayerDetail(playerId, get().matches, get().teams, get().topics, get().tournament, get().archivedTournaments),
 
       checkDanmakuRateLimit: (matchId, senderName) => {
         const now = Date.now();

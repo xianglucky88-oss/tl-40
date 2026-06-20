@@ -369,7 +369,7 @@ export default function PlayerProfilePage() {
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1.5">
+                      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                         <span
                           className={cn(
                             'badge text-xs',
@@ -385,6 +385,9 @@ export default function PlayerProfilePage() {
                         <span className="text-sm font-medium text-navy-800">
                           第{record.round}轮 · 第{record.matchNumber}场
                         </span>
+                        <span className="badge badge-blue text-xs">
+                          {record.actualRole}
+                        </span>
                         {record.isMVP && (
                           <span className="badge badge-gold">
                             <Medal className="w-3 h-3" />
@@ -393,7 +396,11 @@ export default function PlayerProfilePage() {
                         )}
                       </div>
                       <p className="text-sm text-navy-600 truncate">{record.topicTitle}</p>
-                      <div className="flex items-center gap-2 mt-1.5 text-xs text-navy-500">
+                      <div className="flex items-center gap-2 mt-1.5 text-xs text-navy-500 flex-wrap">
+                        <span className="font-medium text-navy-700 truncate max-w-[200px]" title={record.tournamentName}>
+                          {record.tournamentName}
+                        </span>
+                        <span>·</span>
                         <span className="flex items-center gap-1">
                           <Clock className="w-3 h-3" />
                           {new Date(record.date).toLocaleDateString('zh-CN')}
