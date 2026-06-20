@@ -16,6 +16,7 @@ import {
   MatchScore,
 } from '@/types';
 import { uid } from '@/engines/scoringEngine';
+import { getFormatRules } from '@/engines/formatRules';
 
 const now = Date.now();
 
@@ -357,6 +358,112 @@ const ARCHIVE_JUDGE_NAMES = [
   '周怀安', '吴若兰', '郑怀瑾', '孙敬之', '林婉清',
 ];
 
+const buildMatchScore = (
+  matchId: string,
+  proTeam: ArchivedTeam,
+  conTeam: ArchivedTeam,
+  judgeIds: string[],
+  format: DebateFormat,
+  matchIdx: number
+): MatchScore => {
+  const rules = getFormatRules(format);
+  const criteria = rules.scoringCriteria;
+
+  const judgeScores: JudgeScore[] = judgeIds.map((judgeId, jIdx) => {
+    const proPlayerScores: Record<string, PlayerScore> = {};
+    const conPlayerScores: Record<string, PlayerScore> = {};
+
+    proTeam.players.forEach((p) => {
+      const criteriaScores: Record<string, number> = {};
+      criteria.forEach((c) => {
+        criteriaScores[c.id] = Math.floor(Math.random() * (c.maxScore - 10)) + (c.maxScore - 25);
+      });
+      const total = criteria.reduce((sum, c) => sum + criteriaScores[c.id] * c.weight, 0);
+      proPlayerScores[p.id] = { criteriaScores, total };
+    });
+
+    conTeam.players.forEach((p) => {
+      const criteriaScores: Record<string, number> = {};
+      criteria.forEach((c) => {
+        criteriaScores[c.id] = Math.floor(Math.random() * (c.maxScore - 10)) + (c.maxScore - 25);
+      });
+      const total = criteria.reduce((sum, c) => sum + criteriaScores[c.id] * c.weight, 0);
+      conPlayerScores[p.id] = { criteriaScores, total };
+    });
+
+    const proTeamScore = Math.round(
+      Object.values(proPlayerScores).reduce((s, p) => s + p.total, 0) / Math.max(1, proTeam.players.length)
+    );
+    const conTeamScore = Math.round(
+      Object.values(conPlayerScores).reduce((s, p) => s + p.total, 0) / Math.max(1, conTeam.players.length)
+    );
+
+    return {
+      id: uid(),
+      judgeId,
+      proTeamScore,
+      conTeamScore,
+      proPlayerScores,
+      conPlayerScores,
+      comments: {
+        pro: '',
+        con: '',
+        general: '',
+      },
+      submittedAt: Date.now(),
+    };
+  });
+
+  const proTeamTotals = judgeScores.map((js) => js.proTeamScore);
+  const conTeamTotals = judgeScores.map((js) => js.conTeamScore);
+  const proTeamTotal = Math.round(
+    proTeamTotals.reduce((a, b) => a + b, 0) / Math.max(1, proTeamTotals.length)
+  );
+  const conTeamTotal = Math.round(
+    conTeamTotals.reduce((a, b) => a + b, 0) / Math.max(1, conTeamTotals.length)
+  );
+
+  const allPlayerIds = new Set<string>();
+  proTeam.players.forEach((p) => allPlayerIds.add(p.id));
+  conTeam.players.forEach((p) => allPlayerIds.add(p.id));
+
+  const playerScores = Array.from(allPlayerIds).map((playerId) => {
+    const scores: number[] = [];
+    let mvpVotes = 0;
+    judgeScores.forEach((js) => {
+      const proScore = js.proPlayerScores[playerId];
+      const conScore = js.conPlayerScores[playerId];
+      if (proScore) {
+        scores.push(proScore.total);
+      }
+      if (conScore) {
+        scores.push(conScore.total);
+      }
+    });
+    const totalScore = scores.reduce((a, b) => a + b, 0);
+    const avgScore = totalScore / Math.max(1, scores.length);
+    if (Math.random() > 0.7) {
+      mvpVotes = 1 + Math.floor(Math.random() * 2);
+    }
+    return { playerId, totalScore, avgScore, mvpVotes };
+  });
+
+  let mvpPlayerId: string | undefined;
+  if (playerScores.length > 0) {
+    const sorted = [...playerScores].sort((a, b) => b.avgScore - a.avgScore);
+    mvpPlayerId = sorted[0].playerId;
+  }
+
+  return {
+    matchId,
+    judgeScores,
+    proTeamTotal,
+    conTeamTotal,
+    playerScores,
+    mvpPlayerId,
+  };
+};
+
 const buildArchivedTeams = (count: number, tournamentIdx: number): ArchivedTeam[] => {
   const teams: ArchivedTeam[] = [];
   for (let i = 0; i < count; i++) {
@@ -404,8 +511,10 @@ const buildArchivedMatches = (
         matchCounter++;
         const proIdx = (m * 2) % teams.length;
         const conIdx = (m * 2 + 1) % teams.length;
+        const proTeam = teams[proIdx];
+        const conTeam = teams[conIdx];
         const topicIdx = matchCounter % ARCHIVE_TOPICS.length;
-        const winner: Winner = Math.random() > 0.5 ? 'pro' : 'con';
+        const matchId = `am_${tournamentIdx}_${matchCounter}`;
 
         const judgeIds = Array.from(
           { length: tournament.judgesPerMatch || 3 },
@@ -415,20 +524,33 @@ const buildArchivedMatches = (
           (_, j) => ARCHIVE_JUDGE_NAMES[(matchCounter + j) % ARCHIVE_JUDGE_NAMES.length]
         );
 
-        const proScore = 75 + Math.floor(Math.random() * 20);
-        const conScore = 75 + Math.floor(Math.random() * 20);
+        const matchScore = buildMatchScore(
+          matchId,
+          proTeam,
+          conTeam,
+          judgeIds,
+          tournament.format,
+          matchCounter
+        );
+
+        const winner: Winner =
+          matchScore.proTeamTotal > matchScore.conTeamTotal
+            ? 'pro'
+            : matchScore.conTeamTotal > matchScore.proTeamTotal
+            ? 'con'
+            : 'draw';
 
         matches.push({
-          id: `am_${tournamentIdx}_${matchCounter}`,
+          id: matchId,
           tournamentId: `arch_${tournamentIdx}`,
           round,
           matchNumber: m + 1,
-          proTeamId: teams[proIdx].id,
-          conTeamId: teams[conIdx].id,
-          proTeamName: teams[proIdx].name,
-          conTeamName: teams[conIdx].name,
-          proTeamInstitution: teams[proIdx].institution,
-          conTeamInstitution: teams[conIdx].institution,
+          proTeamId: proTeam.id,
+          conTeamId: conTeam.id,
+          proTeamName: proTeam.name,
+          conTeamName: conTeam.name,
+          proTeamInstitution: proTeam.institution,
+          conTeamInstitution: conTeam.institution,
           topicId: `atopic_${topicIdx}`,
           topicTitle: ARCHIVE_TOPICS[topicIdx].title,
           topicProSide: ARCHIVE_TOPICS[topicIdx].pro,
@@ -439,13 +561,7 @@ const buildArchivedMatches = (
           winner,
           startedAt: baseTime + (round - 1) * 86400000 + m * 3600000,
           finishedAt: baseTime + (round - 1) * 86400000 + m * 3600000 + 5400000,
-          scores: {
-            matchId: `am_${tournamentIdx}_${matchCounter}`,
-            judgeScores: [],
-            proTeamTotal: proScore,
-            conTeamTotal: conScore,
-            playerScores: [],
-          },
+          scores: matchScore,
         });
       }
     }
@@ -457,8 +573,10 @@ const buildArchivedMatches = (
         matchCounter++;
         const proIdx = (round + m) % teams.length;
         const conIdx = (round + m + Math.floor(teams.length / 2)) % teams.length;
+        const proTeam = teams[proIdx];
+        const conTeam = teams[conIdx];
         const topicIdx = matchCounter % ARCHIVE_TOPICS.length;
-        const winner: Winner = Math.random() > 0.5 ? 'pro' : 'con';
+        const matchId = `am_${tournamentIdx}_${matchCounter}`;
 
         const judgeIds = Array.from(
           { length: tournament.judgesPerMatch || 3 },
@@ -468,17 +586,33 @@ const buildArchivedMatches = (
           (_, j) => ARCHIVE_JUDGE_NAMES[(matchCounter + j) % ARCHIVE_JUDGE_NAMES.length]
         );
 
+        const matchScore = buildMatchScore(
+          matchId,
+          proTeam,
+          conTeam,
+          judgeIds,
+          tournament.format,
+          matchCounter
+        );
+
+        const winner: Winner =
+          matchScore.proTeamTotal > matchScore.conTeamTotal
+            ? 'pro'
+            : matchScore.conTeamTotal > matchScore.proTeamTotal
+            ? 'con'
+            : 'draw';
+
         matches.push({
-          id: `am_${tournamentIdx}_${matchCounter}`,
+          id: matchId,
           tournamentId: `arch_${tournamentIdx}`,
           round,
           matchNumber: m + 1,
-          proTeamId: teams[proIdx].id,
-          conTeamId: teams[conIdx].id,
-          proTeamName: teams[proIdx].name,
-          conTeamName: teams[conIdx].name,
-          proTeamInstitution: teams[proIdx].institution,
-          conTeamInstitution: teams[conIdx].institution,
+          proTeamId: proTeam.id,
+          conTeamId: conTeam.id,
+          proTeamName: proTeam.name,
+          conTeamName: conTeam.name,
+          proTeamInstitution: proTeam.institution,
+          conTeamInstitution: conTeam.institution,
           topicId: `atopic_${topicIdx}`,
           topicTitle: ARCHIVE_TOPICS[topicIdx].title,
           topicProSide: ARCHIVE_TOPICS[topicIdx].pro,
@@ -489,13 +623,7 @@ const buildArchivedMatches = (
           winner,
           startedAt: baseTime + (round - 1) * 86400000 * 2 + m * 5400000,
           finishedAt: baseTime + (round - 1) * 86400000 * 2 + m * 5400000 + 5400000,
-          scores: {
-            matchId: `am_${tournamentIdx}_${matchCounter}`,
-            judgeScores: [],
-            proTeamTotal: 75 + Math.floor(Math.random() * 20),
-            conTeamTotal: 75 + Math.floor(Math.random() * 20),
-            playerScores: [],
-          },
+          scores: matchScore,
         });
       }
     }
@@ -507,8 +635,10 @@ const buildArchivedMatches = (
         matchCounter++;
         const proIdx = (round + m * 2) % teams.length;
         const conIdx = (round + m * 2 + 1) % teams.length;
+        const proTeam = teams[proIdx];
+        const conTeam = teams[conIdx];
         const topicIdx = matchCounter % ARCHIVE_TOPICS.length;
-        const winner: Winner = Math.random() > 0.5 ? 'pro' : 'con';
+        const matchId = `am_${tournamentIdx}_${matchCounter}`;
 
         const judgeIds = Array.from(
           { length: tournament.judgesPerMatch || 3 },
@@ -518,17 +648,33 @@ const buildArchivedMatches = (
           (_, j) => ARCHIVE_JUDGE_NAMES[(matchCounter + j) % ARCHIVE_JUDGE_NAMES.length]
         );
 
+        const matchScore = buildMatchScore(
+          matchId,
+          proTeam,
+          conTeam,
+          judgeIds,
+          tournament.format,
+          matchCounter
+        );
+
+        const winner: Winner =
+          matchScore.proTeamTotal > matchScore.conTeamTotal
+            ? 'pro'
+            : matchScore.conTeamTotal > matchScore.proTeamTotal
+            ? 'con'
+            : 'draw';
+
         matches.push({
-          id: `am_${tournamentIdx}_${matchCounter}`,
+          id: matchId,
           tournamentId: `arch_${tournamentIdx}`,
           round,
           matchNumber: m + 1,
-          proTeamId: teams[proIdx].id,
-          conTeamId: teams[conIdx].id,
-          proTeamName: teams[proIdx].name,
-          conTeamName: teams[conIdx].name,
-          proTeamInstitution: teams[proIdx].institution,
-          conTeamInstitution: teams[conIdx].institution,
+          proTeamId: proTeam.id,
+          conTeamId: conTeam.id,
+          proTeamName: proTeam.name,
+          conTeamName: conTeam.name,
+          proTeamInstitution: proTeam.institution,
+          conTeamInstitution: conTeam.institution,
           topicId: `atopic_${topicIdx}`,
           topicTitle: ARCHIVE_TOPICS[topicIdx].title,
           topicProSide: ARCHIVE_TOPICS[topicIdx].pro,
@@ -539,13 +685,7 @@ const buildArchivedMatches = (
           winner,
           startedAt: baseTime + (round - 1) * 86400000 * 3 + m * 5400000,
           finishedAt: baseTime + (round - 1) * 86400000 * 3 + m * 5400000 + 5400000,
-          scores: {
-            matchId: `am_${tournamentIdx}_${matchCounter}`,
-            judgeScores: [],
-            proTeamTotal: 75 + Math.floor(Math.random() * 20),
-            conTeamTotal: 75 + Math.floor(Math.random() * 20),
-            playerScores: [],
-          },
+          scores: matchScore,
         });
       }
     }

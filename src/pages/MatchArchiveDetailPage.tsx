@@ -18,7 +18,8 @@ import {
   Clock as ClockIcon,
 } from 'lucide-react';
 import { useDebateStore } from '@/store/debateStore';
-import type { ArchivedMatch, ArchivedTeam } from '@/types';
+import { getFormatRules } from '@/engines/formatRules';
+import type { ArchivedMatch, ArchivedTeam, DebateStageConfig, PlayerScore } from '@/types';
 
 function formatTime(ts: number): string {
   const d = new Date(ts);
@@ -90,6 +91,43 @@ export default function MatchArchiveDetailPage() {
     if (!tournament || !match) return null;
     return tournament.teams.find((t) => t.id === match.conTeamId);
   }, [tournament, match]);
+
+  const formatRules = useMemo(() => {
+    if (!tournament) return null;
+    return getFormatRules(tournament.format);
+  }, [tournament]);
+
+  const proPlayerMatchScores = useMemo(() => {
+    if (!match?.scores || !proTeam) return [];
+    return proTeam.players.map((p) => {
+      const scores: number[] = [];
+      match.scores.judgeScores.forEach((js) => {
+        const ps = js.proPlayerScores[p.id];
+        if (ps) scores.push(ps.total);
+      });
+      const avgScore = scores.length > 0
+        ? scores.reduce((a, b) => a + b, 0) / scores.length
+        : 0;
+      return { ...p, matchAvgScore: avgScore, matchScores: scores };
+    });
+  }, [match?.scores, proTeam]);
+
+  const conPlayerMatchScores = useMemo(() => {
+    if (!match?.scores || !conTeam) return [];
+    return conTeam.players.map((p) => {
+      const scores: number[] = [];
+      match.scores.judgeScores.forEach((js) => {
+        const ps = js.conPlayerScores[p.id];
+        if (ps) scores.push(ps.total);
+      });
+      const avgScore = scores.length > 0
+        ? scores.reduce((a, b) => a + b, 0) / scores.length
+        : 0;
+      return { ...p, matchAvgScore: avgScore, matchScores: scores };
+    });
+  }, [match?.scores, conTeam]);
+
+  const mvpPlayerId = match?.scores?.mvpPlayerId;
 
   if (!match || !tournament) {
     return (
@@ -366,16 +404,19 @@ export default function MatchArchiveDetailPage() {
                 <div className="font-serif font-bold text-navy-800 text-lg">{proTeam.name}</div>
                 <div className="text-sm text-navy-500">{proTeam.institution}</div>
                 <div className="space-y-2 pt-3 border-t border-navy-100">
-                  {proTeam.players.map((p) => (
+                  {proPlayerMatchScores.map((p) => (
                     <div key={p.id} className="flex items-center justify-between py-1.5">
                       <div className="flex items-center gap-2">
                         <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-medium">
                           {p.role}
                         </span>
                         <span className="text-sm text-navy-700">{p.name}</span>
+                        {mvpPlayerId === p.id && (
+                          <Award className="w-3.5 h-3.5 text-gold-500" />
+                        )}
                       </div>
-                      <div className="text-xs text-navy-400">
-                        场均 {p.avgScore.toFixed(1)} 分
+                      <div className="text-xs font-semibold text-emerald-600">
+                        本场 {p.matchAvgScore.toFixed(1)} 分
                       </div>
                     </div>
                   ))}
@@ -396,16 +437,19 @@ export default function MatchArchiveDetailPage() {
                 <div className="font-serif font-bold text-navy-800 text-lg">{conTeam.name}</div>
                 <div className="text-sm text-navy-500">{conTeam.institution}</div>
                 <div className="space-y-2 pt-3 border-t border-navy-100">
-                  {conTeam.players.map((p) => (
+                  {conPlayerMatchScores.map((p) => (
                     <div key={p.id} className="flex items-center justify-between py-1.5">
                       <div className="flex items-center gap-2">
                         <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-medium">
                           {p.role}
                         </span>
                         <span className="text-sm text-navy-700">{p.name}</span>
+                        {mvpPlayerId === p.id && (
+                          <Award className="w-3.5 h-3.5 text-gold-500" />
+                        )}
                       </div>
-                      <div className="text-xs text-navy-400">
-                        场均 {p.avgScore.toFixed(1)} 分
+                      <div className="text-xs font-semibold text-red-600">
+                        本场 {p.matchAvgScore.toFixed(1)} 分
                       </div>
                     </div>
                   ))}
@@ -423,37 +467,57 @@ export default function MatchArchiveDetailPage() {
           <h3 className="font-serif text-lg font-bold text-navy-900 flex items-center gap-2 mb-5">
             <Target className="w-5 h-5 text-gold-500" />
             赛程回顾
+            {formatRules && (
+              <span className="text-sm font-normal text-navy-500">· {formatRules.label}</span>
+            )}
           </h3>
           <div className="relative pl-6 space-y-4">
             <div className="absolute left-[7px] top-2 bottom-2 w-px bg-gradient-to-b from-gold-400 via-navy-200 to-transparent" />
-            {[
-              { name: '立论陈词', side: '正方', duration: '3分钟', desc: '正方一辩开篇立论' },
-              { name: '立论陈词', side: '反方', duration: '3分钟', desc: '反方一辩开篇立论' },
-              { name: '攻辩环节', side: '双方', duration: '6分钟', desc: '二辩、三辩交替攻辩' },
-              { name: '自由辩论', side: '双方', duration: '8分钟', desc: '双方自由辩论' },
-              { name: '总结陈词', side: '反方', duration: '4分钟', desc: '反方四辩总结陈词' },
-              { name: '总结陈词', side: '正方', duration: '4分钟', desc: '正方四辩总结陈词' },
-            ].map((stage, idx) => (
-              <div key={idx} className="relative">
-                <div className="absolute -left-[1px] top-2.5 w-[15px] h-[15px] rounded-full border-2 border-white shadow-sm bg-gradient-gold" />
-                <div className="card p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        stage.side === '正方' ? 'bg-emerald-100 text-emerald-700' :
-                        stage.side === '反方' ? 'bg-red-100 text-red-700' :
-                        'bg-navy-100 text-navy-700'
-                      }`}>
-                        {stage.side}
-                      </span>
-                      <span className="font-serif font-semibold text-navy-800">{stage.name}</span>
+            {formatRules?.stages.map((stage: DebateStageConfig, idx: number) => {
+              const sideLabel =
+                stage.side === 'pro' ? '正方' :
+                stage.side === 'con' ? '反方' :
+                stage.side === 'judge' ? '评委' : '双方';
+              const durationMin = Math.floor(stage.duration / 60);
+              const durationSec = stage.duration % 60;
+              const durationStr = durationSec > 0
+                ? `${durationMin}分${durationSec}秒`
+                : `${durationMin}分钟`;
+              return (
+                <div key={stage.id} className="relative">
+                  <div className="absolute -left-[1px] top-2.5 w-[15px] h-[15px] rounded-full border-2 border-white shadow-sm bg-gradient-gold" />
+                  <div className="card p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                          stage.side === 'pro' ? 'bg-emerald-100 text-emerald-700' :
+                          stage.side === 'con' ? 'bg-red-100 text-red-700' :
+                          stage.side === 'judge' ? 'bg-navy-100 text-navy-700' :
+                          'bg-purple-100 text-purple-700'
+                        }`}>
+                          {sideLabel}
+                        </span>
+                        <span className="font-serif font-semibold text-navy-800">{stage.name}</span>
+                        {stage.bpRole && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-gold-100 text-gold-700 font-medium">
+                            {stage.bpRole.toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs text-navy-400 font-mono">{durationStr}</span>
                     </div>
-                    <span className="text-xs text-navy-400 font-mono">{stage.duration}</span>
+                    {stage.crossExamine?.enabled && (
+                      <p className="text-xs text-purple-600 mb-1.5">
+                        * 含盘问环节 {stage.crossExamine.duration ? `(${Math.floor(stage.crossExamine.duration / 60)}分钟)` : ''}
+                      </p>
+                    )}
+                    <p className="text-sm text-navy-500 ml-0">
+                      {stage.speakerIndex != null && `${['一辩', '二辩', '三辩', '四辩'][stage.speakerIndex] || ''}发言`}
+                    </p>
                   </div>
-                  <p className="text-sm text-navy-500 ml-0">{stage.desc}</p>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -463,6 +527,11 @@ export default function MatchArchiveDetailPage() {
           <h3 className="font-serif text-lg font-bold text-navy-900 flex items-center gap-2 mb-5">
             <Star className="w-5 h-5 text-gold-500" />
             选手评分
+            {match?.scores && (
+              <span className="text-sm font-normal text-navy-500">
+                · 单场评分
+              </span>
+            )}
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -472,22 +541,35 @@ export default function MatchArchiveDetailPage() {
                 正方选手
               </h4>
               <div className="space-y-3">
-                {proTeam?.players.map((p) => (
-                  <div key={p.id} className="card p-3">
+                {proPlayerMatchScores.map((p) => (
+                <div key={p.id} className="card p-3">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-medium">
                           {p.role}
                         </span>
-                        <span className="font-medium text-navy-800">{p.name}</span>
+                        <div>
+                          <span className="font-medium text-navy-800">{p.name}</span>
+                          {mvpPlayerId === p.id && (
+                            <span className="ml-1 inline-flex items-center gap-0.5 text-[10px] text-gold-600">
+                              <Award className="w-3 h-3" />
+                              MVP
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <div className="text-lg font-bold text-emerald-600 font-serif">
-                        {p.avgScore.toFixed(1)}
+                      <div className="text-right">
+                        <div className="text-lg font-bold text-emerald-600 font-serif">
+                          {p.matchAvgScore.toFixed(1)}
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-navy-400">
-                      <span>出场 {p.totalMatches} 场</span>
-                      <span>MVP {p.mvpCount} 次</span>
+                    <div className="flex items-center gap-3 text-xs text-navy-400 flex-wrap">
+                      {p.matchScores.length > 0 && (
+                        <span>
+                          评委评分: {p.matchScores.map(s => s.toFixed(0)).join(' / ')}
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -500,22 +582,35 @@ export default function MatchArchiveDetailPage() {
                 反方选手
               </h4>
               <div className="space-y-3">
-                {conTeam?.players.map((p) => (
-                  <div key={p.id} className="card p-3">
+                {conPlayerMatchScores.map((p) => (
+                <div key={p.id} className="card p-3">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-medium">
                           {p.role}
                         </span>
-                        <span className="font-medium text-navy-800">{p.name}</span>
+                        <div>
+                          <span className="font-medium text-navy-800">{p.name}</span>
+                          {mvpPlayerId === p.id && (
+                            <span className="ml-1 inline-flex items-center gap-0.5 text-[10px] text-gold-600">
+                              <Award className="w-3 h-3" />
+                              MVP
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <div className="text-lg font-bold text-red-500 font-serif">
-                        {p.avgScore.toFixed(1)}
+                      <div className="text-right">
+                        <div className="text-lg font-bold text-red-500 font-serif">
+                          {p.matchAvgScore.toFixed(1)}
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-navy-400">
-                      <span>出场 {p.totalMatches} 场</span>
-                      <span>MVP {p.mvpCount} 次</span>
+                    <div className="flex items-center gap-3 text-xs text-navy-400 flex-wrap">
+                      {p.matchScores.length > 0 && (
+                        <span>
+                          评委评分: {p.matchScores.map(s => s.toFixed(0)).join(' / ')}
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))}

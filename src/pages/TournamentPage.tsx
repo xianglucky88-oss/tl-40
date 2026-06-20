@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useDebateStore } from '@/store/debateStore';
 import { MatchCard } from '@/components/cards/MatchCard';
 import Empty from '@/components/ui/Empty';
-import { AlertTriangle, Swords, ListTree, Sparkles, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Swords, ListTree, Sparkles, RefreshCw, Archive, CheckCircle } from 'lucide-react';
 import type { DebateFormat, TournamentType, MatchPairing, Team } from '@/types';
 
 const formatOptions: { value: DebateFormat; label: string }[] = [
@@ -101,9 +102,12 @@ export default function TournamentPage() {
   const isCurrentRoundFinished = useDebateStore((s) => s.isCurrentRoundFinished);
   const getTeamById = useDebateStore((s) => s.getTeamById);
   const getMatchesByRound = useDebateStore((s) => s.getMatchesByRound);
+  const archiveCurrentTournament = useDebateStore((s) => s.archiveCurrentTournament);
+  const navigate = useNavigate();
 
   const [activeRound, setActiveRound] = useState<number>(tournament.currentRound);
   const [viewMode, setViewMode] = useState<'tree' | 'list'>('list');
+  const [archiveResult, setArchiveResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const totalRounds = tournament.totalRounds;
   const roundList = useMemo(
@@ -115,6 +119,23 @@ export default function TournamentPage() {
     if (tournament.currentRound >= totalRounds) return false;
     return isCurrentRoundFinished();
   }, [tournament.currentRound, totalRounds, isCurrentRoundFinished]);
+
+  const allMatchesFinished = useMemo(() => {
+    return matches.length > 0 && matches.every((m) => m.status === 'finished');
+  }, [matches]);
+
+  const handleArchive = () => {
+    const result = archiveCurrentTournament();
+    if (result.success) {
+      setArchiveResult({ success: true, message: `赛事已成功归档！归档编号：${result.archivedId}` });
+      setTimeout(() => {
+        navigate(`/archive/${result.archivedId}`);
+      }, 1500);
+    } else {
+      setArchiveResult({ success: false, message: result.error ?? '归档失败' });
+      setTimeout(() => setArchiveResult(null), 4000);
+    }
+  };
 
   const isSingleElim = tournament.type === 'single_elimination';
 
@@ -213,18 +234,54 @@ export default function TournamentPage() {
         </div>
 
         <div className="pt-3 border-t border-navy-100">
-          <button
-            onClick={generateNextRound}
-            disabled={!canGenerateNext}
-            className="btn-primary"
-          >
-            <RefreshCw className="w-4 h-4" />
-            一键生成下一轮
-          </button>
-          <span className="ml-3 text-xs text-navy-400">
-            当前进度：第 {tournament.currentRound} / {totalRounds} 轮
-            {!canGenerateNext && tournament.currentRound < totalRounds && '（当前轮未结束）'}
-          </span>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={generateNextRound}
+              disabled={!canGenerateNext}
+              className="btn-primary"
+            >
+              <RefreshCw className="w-4 h-4" />
+              一键生成下一轮
+            </button>
+            <span className="text-xs text-navy-400">
+              当前进度：第 {tournament.currentRound} / {totalRounds} 轮
+              {!canGenerateNext && tournament.currentRound < totalRounds && '（当前轮未结束）'}
+            </span>
+
+            <div className="flex-1" />
+
+            <button
+              onClick={handleArchive}
+              disabled={!allMatchesFinished}
+              className="btn-secondary"
+            >
+              <Archive className="w-4 h-4" />
+              归档本届赛事
+            </button>
+          </div>
+
+          {archiveResult && (
+            <div
+              className={`mt-4 p-3 rounded-lg flex items-center gap-2 ${
+                archiveResult.success
+                  ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                  : 'bg-red-50 border border-red-200 text-red-600'
+              }`}
+            >
+              {archiveResult.success ? (
+                <CheckCircle className="w-5 h-5 flex-shrink-0" />
+              ) : (
+                <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+              )}
+              <span className="text-sm font-medium">{archiveResult.message}</span>
+            </div>
+          )}
+
+          {!allMatchesFinished && matches.length > 0 && (
+            <p className="mt-3 text-xs text-navy-400">
+              * 所有比赛结束后可归档
+            </p>
+          )}
         </div>
       </div>
 
