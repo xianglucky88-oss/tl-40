@@ -13,6 +13,10 @@ import {
   DebateFormat,
   Danmaku,
   DanmakuChannelMessage,
+  ArchivedTournament,
+  ArchiveFilter,
+  ArchivedMatch,
+  TournamentType,
 } from '@/types';
 import {
   buildInitialTeams,
@@ -20,6 +24,7 @@ import {
   buildInitialTopics,
   buildInitialTournament,
   buildSampleMatches,
+  buildArchivedTournaments,
 } from '@/data/mockData';
 import {
   generateSingleElimination,
@@ -55,6 +60,8 @@ interface DebateState {
 
   danmakuList: Danmaku[];
   danmakuEnabledByMatch: Record<string, boolean>;
+
+  archivedTournaments: ArchivedTournament[];
 
   initIfEmpty: () => void;
   getAllJudgesSubmitted: (matchId: string) => boolean;
@@ -109,6 +116,17 @@ interface DebateState {
   clearDanmakuByMatch: (matchId: string) => void;
   subscribeDanmakuChannel: (matchId: string, callback: (d: Danmaku) => void) => () => void;
   checkDanmakuRateLimit: (matchId: string, senderName: string) => { allowed: boolean; waitSeconds?: number };
+
+  getArchivedTournamentById: (id: string) => ArchivedTournament | undefined;
+  getArchivedMatchesByTournament: (tournamentId: string) => ArchivedMatch[];
+  getArchivedMatchesByRound: (tournamentId: string, round: number) => ArchivedMatch[];
+  getArchivedMatchById: (matchId: string) => ArchivedMatch | undefined;
+  filterArchivedTournaments: (filter: ArchiveFilter) => ArchivedTournament[];
+  getArchiveYears: () => number[];
+  getArchiveSeasons: () => string[];
+  getArchiveFormats: () => DebateFormat[];
+  getArchiveTypes: () => TournamentType[];
+  archiveCurrentTournament: () => { success: boolean; error?: string; archivedId?: string };
 }
 
 const defaultTournament = buildInitialTournament();
@@ -116,6 +134,7 @@ const defaultTeams = buildInitialTeams(8);
 const defaultJudges = buildInitialJudges();
 const defaultTopics = buildInitialTopics();
 const defaultMatches = buildSampleMatches(defaultTeams, defaultJudges, defaultTopics, defaultTournament);
+const defaultArchivedTournaments = buildArchivedTournaments();
 
 const danmakuChannel =
   typeof BroadcastChannel !== 'undefined'
@@ -137,6 +156,8 @@ export const useDebateStore = create<DebateState>()(
 
       danmakuList: [],
       danmakuEnabledByMatch: {},
+
+      archivedTournaments: defaultArchivedTournaments,
 
       getAllJudgesSubmitted: (matchId: string): boolean => {
         const s = get();
@@ -594,6 +615,192 @@ export const useDebateStore = create<DebateState>()(
           window.removeEventListener('storage', handleStorage);
         };
       },
+
+      getArchivedTournamentById: (id) => {
+        return get().archivedTournaments.find((t) => t.id === id);
+      },
+
+      getArchivedMatchesByTournament: (tournamentId) => {
+        const tournament = get().getArchivedTournamentById(tournamentId);
+        return tournament?.matches ?? [];
+      },
+
+      getArchivedMatchesByRound: (tournamentId, round) => {
+        return get()
+          .getArchivedMatchesByTournament(tournamentId)
+          .filter((m) => m.round === round);
+      },
+
+      getArchivedMatchById: (matchId) => {
+        for (const t of get().archivedTournaments) {
+          const match = t.matches.find((m) => m.id === matchId);
+          if (match) return match;
+        }
+        return undefined;
+      },
+
+      filterArchivedTournaments: (filter) => {
+        const { year, season, format, type, keyword } = filter;
+        return get().archivedTournaments.filter((t) => {
+          if (year && t.year !== year) return false;
+          if (season && t.season !== season) return false;
+          if (format && t.format !== format) return false;
+          if (type && t.type !== type) return false;
+          if (keyword) {
+            const kw = keyword.toLowerCase();
+            if (
+              !t.name.toLowerCase().includes(kw) &&
+              !t.description?.toLowerCase().includes(kw) &&
+              !t.championTeamName?.toLowerCase().includes(kw)
+            ) {
+              return false;
+            }
+          }
+          return true;
+        });
+      },
+
+      getArchiveYears: () => {
+        const years = new Set(get().archivedTournaments.map((t) => t.year));
+        return Array.from(years).sort((a, b) => b - a);
+      },
+
+      getArchiveSeasons: () => {
+        const seasons = new Set(get().archivedTournaments.map((t) => t.season));
+        return Array.from(seasons);
+      },
+
+      getArchiveFormats: () => {
+        const formats = new Set(get().archivedTournaments.map((t) => t.format));
+        return Array.from(formats);
+      },
+
+      getArchiveTypes: () => {
+        const types = new Set(get().archivedTournaments.map((t) => t.type));
+        return Array.from(types);
+      },
+
+      archiveCurrentTournament: () => {
+        const s = get();
+        const { tournament, matches, teams, judgeScoresByMatch } = s;
+
+        const finishedMatches = matches.filter((m) => m.status === 'finished');
+        if (finishedMatches.length === 0) {
+          return { success: false, error: '当前赛事没有已完成的比赛，无法归档' };
+        }
+
+        const allFinished = matches.every((m) => m.status === 'finished');
+        if (!allFinished) {
+          return { success: false, error: '当前赛事还有未完成的比赛，请先完成所有比赛后再归档' };
+        }
+
+        const now = Date.now();
+        const year = new Date(tournament.createdAt).getFullYear();
+
+        const archivedTeams: ArchivedTournament['teams'] = teams
+          .filter((t) => !t.id.startsWith('__'))
+          .map((team) => {
+            const teamMatches = finishedMatches.filter(
+              (m) => m.proTeamId === team.id || m.conTeamId === team.id
+            );
+            const wins = teamMatches.filter(
+              (m) =>
+                (m.proTeamId === team.id && m.winner === 'pro') ||
+                (m.conTeamId === team.id && m.winner === 'con')
+            ).length;
+            const losses = teamMatches.filter(
+              (m) =>
+                (m.proTeamId === team.id && m.winner === 'con') ||
+                (m.conTeamId === team.id && m.winner === 'pro')
+            ).length;
+            const draws = teamMatches.filter((m) => m.winner === 'draw').length;
+
+            return {
+              id: team.id,
+              name: team.name,
+              institution: team.institution,
+              players: team.players.map((p) => ({
+                id: p.id,
+                name: p.name,
+                role: p.role,
+                avgScore:
+                  p.scores.length > 0
+                    ? p.scores.reduce((sum, s) => sum + s.score, 0) / p.scores.length
+                    : 0,
+                totalMatches: p.scores.length,
+                mvpCount: p.scores.filter((s) => s.isMVP).length,
+              })),
+              wins,
+              losses,
+              draws,
+            };
+          });
+
+        const archivedMatches: ArchivedTournament['matches'] = finishedMatches.map((m) => {
+          const proTeam = teams.find((t) => t.id === m.proTeamId);
+          const conTeam = teams.find((t) => t.id === m.conTeamId);
+          const topic = s.topics.find((t) => t.id === m.topicId);
+          const judgeNames = m.judgeIds
+            .map((jid) => s.judges.find((j) => j.id === jid)?.name)
+            .filter(Boolean) as string[];
+
+          return {
+            id: m.id,
+            tournamentId: tournament.id,
+            round: m.round,
+            matchNumber: m.matchNumber,
+            proTeamId: m.proTeamId,
+            conTeamId: m.conTeamId,
+            proTeamName: proTeam?.name ?? '',
+            conTeamName: conTeam?.name ?? '',
+            proTeamInstitution: proTeam?.institution ?? '',
+            conTeamInstitution: conTeam?.institution ?? '',
+            topicId: m.topicId,
+            topicTitle: topic?.title ?? '',
+            topicProSide: topic?.proSide ?? '',
+            topicConSide: topic?.conSide ?? '',
+            judgeIds: m.judgeIds,
+            judgeNames,
+            status: m.status,
+            winner: m.winner,
+            startedAt: m.startedAt ?? now,
+            finishedAt: m.finishedAt ?? now,
+            scores: m.scores,
+          };
+        });
+
+        const sortedTeams = [...archivedTeams].sort((a, b) => {
+          if (b.wins !== a.wins) return b.wins - a.wins;
+          return b.draws - a.draws;
+        });
+
+        const archivedTournament: ArchivedTournament = {
+          id: `arch_${tournament.id}_${now}`,
+          name: tournament.name,
+          format: tournament.format,
+          type: tournament.type,
+          season: '存档',
+          year,
+          totalRounds: tournament.totalRounds,
+          totalMatches: archivedMatches.length,
+          judgesPerMatch: tournament.judgesPerMatch,
+          startDate: archivedMatches[0]?.startedAt ?? now,
+          endDate: archivedMatches[archivedMatches.length - 1]?.finishedAt ?? now,
+          description: tournament.description,
+          championTeamId: sortedTeams[0]?.id,
+          championTeamName: sortedTeams[0]?.name,
+          runnerUpTeamId: sortedTeams[1]?.id,
+          runnerUpTeamName: sortedTeams[1]?.name,
+          teams: archivedTeams,
+          matches: archivedMatches,
+        };
+
+        set((st) => ({
+          archivedTournaments: [...st.archivedTournaments, archivedTournament],
+        }));
+
+        return { success: true, archivedId: archivedTournament.id };
+      },
     }),
     {
       name: 'debate-tournament-store',
@@ -609,6 +816,7 @@ export const useDebateStore = create<DebateState>()(
         activeMatchId: state.activeMatchId,
         danmakuList: state.danmakuList,
         danmakuEnabledByMatch: state.danmakuEnabledByMatch,
+        archivedTournaments: state.archivedTournaments,
       }),
     }
   )

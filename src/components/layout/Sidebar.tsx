@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Medal,
+  Archive,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -29,6 +30,7 @@ const navItems: NavItem[] = [
   { path: '/live', name: '比赛现场', icon: Timer },
   { path: '/judge', name: '评委打分', icon: Award },
   { path: '/ranking', name: '成绩排行', icon: BarChart3 },
+  { path: '/archive', name: '历史档案', icon: Archive },
 ];
 
 interface SidebarProps {

@@ -1,4 +1,20 @@
-import { Team, Judge, Topic, TournamentConfig, MatchPairing, DebateFormat, TournamentType, TopicCategory } from '@/types';
+import {
+  Team,
+  Judge,
+  Topic,
+  TournamentConfig,
+  MatchPairing,
+  DebateFormat,
+  TournamentType,
+  TopicCategory,
+  ArchivedTournament,
+  ArchivedMatch,
+  ArchivedTeam,
+  Winner,
+  PlayerScore,
+  JudgeScore,
+  MatchScore,
+} from '@/types';
 import { uid } from '@/engines/scoringEngine';
 
 const now = Date.now();
@@ -251,4 +267,328 @@ export const buildSampleMatches = (
   }
 
   return pairs;
+};
+
+const ARCHIVE_TOURNAMENT_DATA = [
+  {
+    name: '2024·首届全国高校华语辩论邀请赛',
+    format: 'mandarin' as DebateFormat,
+    type: 'single_elimination' as TournamentType,
+    season: '春季赛',
+    year: 2024,
+    totalRounds: 4,
+    totalMatches: 15,
+    judgesPerMatch: 3,
+    description: '首届全国高校华语辩论邀请赛，汇集全国顶尖高校辩论队伍，共16支队伍参赛',
+  },
+  {
+    name: '2024·秋季辩论联赛',
+    format: 'parliamentary' as DebateFormat,
+    type: 'round_robin' as TournamentType,
+    season: '秋季赛',
+    year: 2024,
+    totalRounds: 7,
+    totalMatches: 28,
+    judgesPerMatch: 3,
+    description: '秋季辩论联赛，采用议会制赛制，8支队伍循环对决',
+  },
+  {
+    name: '2025·春季冠军赛',
+    format: 'mandarin' as DebateFormat,
+    type: 'swiss' as TournamentType,
+    season: '春季赛',
+    year: 2025,
+    totalRounds: 5,
+    totalMatches: 20,
+    judgesPerMatch: 3,
+    description: '2025春季冠军赛，瑞士轮赛制，12支精英队伍角逐冠军',
+  },
+  {
+    name: '2025·模拟法庭邀请赛',
+    format: 'moot_court' as DebateFormat,
+    type: 'single_elimination' as TournamentType,
+    season: '夏季赛',
+    year: 2025,
+    totalRounds: 3,
+    totalMatches: 7,
+    judgesPerMatch: 5,
+    description: '首届模拟法庭邀请赛，法学院校专业对决',
+  },
+  {
+    name: '2025·秋季BP辩论赛',
+    format: 'british_parliamentary' as DebateFormat,
+    type: 'swiss' as TournamentType,
+    season: '秋季赛',
+    year: 2025,
+    totalRounds: 4,
+    totalMatches: 16,
+    judgesPerMatch: 3,
+    description: '英国议会制辩论赛，国际标准赛制，16支队伍四队对决',
+  },
+];
+
+const ARCHIVE_TEAM_NAMES = [
+  '北京大学青锋队', '清华大学明辨队', '复旦大学知行队', '上海交大卫国队',
+  '浙江大学求是队', '南京大学博雅队', '武汉大学经纬队', '中山大学星芒队',
+  '中国人民大学格致队', '北京师范大学云帆队', '厦门大学弘毅队', '同济大学晨光队',
+  '四川大学百川队', '南开大学观澜队', '西安交大队', '华中科技大学北辰队',
+];
+
+const ARCHIVE_PLAYER_NAMES = [
+  '陈思远', '李子轩', '王嘉怡', '赵浩然', '孙若涵', '周雨泽', '吴梓涵', '郑星宇',
+  '冯诗涵', '陈伟祺', '褚雅婷', '卫明辉', '蒋晨曦', '沈瑞杰', '韩佳宁', '杨博文',
+  '朱欣怡', '秦奕辰', '尤婉清', '许嘉豪', '何梦琪', '吕振宇', '施雅琴', '张景行',
+  '孔芷若', '曹逸凡', '严佳琪', '华承恩', '金沐阳', '魏语桐', '陶俊杰', '姜雪莹',
+];
+
+const ARCHIVE_TOPICS = [
+  { title: '人工智能的发展对人类未来利大于弊/弊大于利', pro: '利大于弊', con: '弊大于利' },
+  { title: '当今社会，更需要英雄主义/集体主义', pro: '更需要英雄主义', con: '更需要集体主义' },
+  { title: '应该全面禁止/不应该全面禁止未成年人网络游戏', pro: '应该全面禁止', con: '不应该全面禁止' },
+  { title: '短视频的流行提升/降低了当代人的认知能力', pro: '提升了认知能力', con: '降低了认知能力' },
+  { title: '全球化时代，母语教育比外语教育更/更不重要', pro: '母语教育更重要', con: '外语教育更重要' },
+  { title: '应该/不应该在全国推行免费大学教育', pro: '应该推行', con: '不应该推行' },
+  { title: '科技进步使人更/更不自由', pro: '使人更自由', con: '使人更不自由' },
+  { title: '知识付费能/不能缓解当代年轻人的焦虑', pro: '能缓解焦虑', con: '不能缓解焦虑' },
+];
+
+const ARCHIVE_JUDGE_NAMES = [
+  '张秉文', '李明远', '王雅琴', '赵思琪', '陈守正',
+  '周怀安', '吴若兰', '郑怀瑾', '孙敬之', '林婉清',
+];
+
+const buildArchivedTeams = (count: number, tournamentIdx: number): ArchivedTeam[] => {
+  const teams: ArchivedTeam[] = [];
+  for (let i = 0; i < count; i++) {
+    const teamIdx = (tournamentIdx * 4 + i) % ARCHIVE_TEAM_NAMES.length;
+    const players: ArchivedTeam['players'] = [];
+    for (let j = 0; j < 4; j++) {
+      const playerIdx = (tournamentIdx * 16 + i * 4 + j) % ARCHIVE_PLAYER_NAMES.length;
+      players.push({
+        id: `ap_${tournamentIdx}_${i}_${j}`,
+        name: ARCHIVE_PLAYER_NAMES[playerIdx],
+        role: ['一辩', '二辩', '三辩', '四辩'][j],
+        avgScore: 80 + Math.floor(Math.random() * 15),
+        totalMatches: 3 + Math.floor(Math.random() * 5),
+        mvpCount: Math.floor(Math.random() * 3),
+      });
+    }
+    teams.push({
+      id: `at_${tournamentIdx}_${i}`,
+      name: ARCHIVE_TEAM_NAMES[teamIdx],
+      institution: ARCHIVE_TEAM_NAMES[teamIdx].split(/大学|交大|师大/)[0] + '大学',
+      players,
+      finalRank: i + 1,
+      wins: Math.max(0, count - i - 1 + Math.floor(Math.random() * 2)),
+      losses: Math.min(i, count - 1),
+      draws: Math.floor(Math.random() * 2),
+    });
+  }
+  return teams;
+};
+
+const buildArchivedMatches = (
+  teams: ArchivedTeam[],
+  tournament: typeof ARCHIVE_TOURNAMENT_DATA[0],
+  tournamentIdx: number
+): ArchivedMatch[] => {
+  const matches: ArchivedMatch[] = [];
+  const totalRounds = tournament.totalRounds;
+  const baseTime = new Date(tournament.year, 2 + tournamentIdx, 1, 9, 0, 0).getTime();
+
+  if (tournament.type === 'single_elimination') {
+    let matchCounter = 0;
+    for (let round = 1; round <= totalRounds; round++) {
+      const matchCount = Math.max(1, Math.floor(teams.length / Math.pow(2, round)));
+      for (let m = 0; m < matchCount; m++) {
+        matchCounter++;
+        const proIdx = (m * 2) % teams.length;
+        const conIdx = (m * 2 + 1) % teams.length;
+        const topicIdx = matchCounter % ARCHIVE_TOPICS.length;
+        const winner: Winner = Math.random() > 0.5 ? 'pro' : 'con';
+
+        const judgeIds = Array.from(
+          { length: tournament.judgesPerMatch || 3 },
+          (_, j) => `aj_${tournamentIdx}_${(matchCounter + j) % ARCHIVE_JUDGE_NAMES.length}`
+        );
+        const judgeNames = judgeIds.map(
+          (_, j) => ARCHIVE_JUDGE_NAMES[(matchCounter + j) % ARCHIVE_JUDGE_NAMES.length]
+        );
+
+        const proScore = 75 + Math.floor(Math.random() * 20);
+        const conScore = 75 + Math.floor(Math.random() * 20);
+
+        matches.push({
+          id: `am_${tournamentIdx}_${matchCounter}`,
+          tournamentId: `arch_${tournamentIdx}`,
+          round,
+          matchNumber: m + 1,
+          proTeamId: teams[proIdx].id,
+          conTeamId: teams[conIdx].id,
+          proTeamName: teams[proIdx].name,
+          conTeamName: teams[conIdx].name,
+          proTeamInstitution: teams[proIdx].institution,
+          conTeamInstitution: teams[conIdx].institution,
+          topicId: `atopic_${topicIdx}`,
+          topicTitle: ARCHIVE_TOPICS[topicIdx].title,
+          topicProSide: ARCHIVE_TOPICS[topicIdx].pro,
+          topicConSide: ARCHIVE_TOPICS[topicIdx].con,
+          judgeIds,
+          judgeNames,
+          status: 'finished',
+          winner,
+          startedAt: baseTime + (round - 1) * 86400000 + m * 3600000,
+          finishedAt: baseTime + (round - 1) * 86400000 + m * 3600000 + 5400000,
+          scores: {
+            matchId: `am_${tournamentIdx}_${matchCounter}`,
+            judgeScores: [],
+            proTeamTotal: proScore,
+            conTeamTotal: conScore,
+            playerScores: [],
+          },
+        });
+      }
+    }
+  } else if (tournament.type === 'round_robin') {
+    let matchCounter = 0;
+    for (let round = 1; round <= totalRounds; round++) {
+      const matchesPerRound = Math.floor(teams.length / 2);
+      for (let m = 0; m < matchesPerRound; m++) {
+        matchCounter++;
+        const proIdx = (round + m) % teams.length;
+        const conIdx = (round + m + Math.floor(teams.length / 2)) % teams.length;
+        const topicIdx = matchCounter % ARCHIVE_TOPICS.length;
+        const winner: Winner = Math.random() > 0.5 ? 'pro' : 'con';
+
+        const judgeIds = Array.from(
+          { length: tournament.judgesPerMatch || 3 },
+          (_, j) => `aj_${tournamentIdx}_${(matchCounter + j) % ARCHIVE_JUDGE_NAMES.length}`
+        );
+        const judgeNames = judgeIds.map(
+          (_, j) => ARCHIVE_JUDGE_NAMES[(matchCounter + j) % ARCHIVE_JUDGE_NAMES.length]
+        );
+
+        matches.push({
+          id: `am_${tournamentIdx}_${matchCounter}`,
+          tournamentId: `arch_${tournamentIdx}`,
+          round,
+          matchNumber: m + 1,
+          proTeamId: teams[proIdx].id,
+          conTeamId: teams[conIdx].id,
+          proTeamName: teams[proIdx].name,
+          conTeamName: teams[conIdx].name,
+          proTeamInstitution: teams[proIdx].institution,
+          conTeamInstitution: teams[conIdx].institution,
+          topicId: `atopic_${topicIdx}`,
+          topicTitle: ARCHIVE_TOPICS[topicIdx].title,
+          topicProSide: ARCHIVE_TOPICS[topicIdx].pro,
+          topicConSide: ARCHIVE_TOPICS[topicIdx].con,
+          judgeIds,
+          judgeNames,
+          status: 'finished',
+          winner,
+          startedAt: baseTime + (round - 1) * 86400000 * 2 + m * 5400000,
+          finishedAt: baseTime + (round - 1) * 86400000 * 2 + m * 5400000 + 5400000,
+          scores: {
+            matchId: `am_${tournamentIdx}_${matchCounter}`,
+            judgeScores: [],
+            proTeamTotal: 75 + Math.floor(Math.random() * 20),
+            conTeamTotal: 75 + Math.floor(Math.random() * 20),
+            playerScores: [],
+          },
+        });
+      }
+    }
+  } else {
+    let matchCounter = 0;
+    for (let round = 1; round <= totalRounds; round++) {
+      const matchesPerRound = Math.floor(teams.length / 2);
+      for (let m = 0; m < matchesPerRound; m++) {
+        matchCounter++;
+        const proIdx = (round + m * 2) % teams.length;
+        const conIdx = (round + m * 2 + 1) % teams.length;
+        const topicIdx = matchCounter % ARCHIVE_TOPICS.length;
+        const winner: Winner = Math.random() > 0.5 ? 'pro' : 'con';
+
+        const judgeIds = Array.from(
+          { length: tournament.judgesPerMatch || 3 },
+          (_, j) => `aj_${tournamentIdx}_${(matchCounter + j) % ARCHIVE_JUDGE_NAMES.length}`
+        );
+        const judgeNames = judgeIds.map(
+          (_, j) => ARCHIVE_JUDGE_NAMES[(matchCounter + j) % ARCHIVE_JUDGE_NAMES.length]
+        );
+
+        matches.push({
+          id: `am_${tournamentIdx}_${matchCounter}`,
+          tournamentId: `arch_${tournamentIdx}`,
+          round,
+          matchNumber: m + 1,
+          proTeamId: teams[proIdx].id,
+          conTeamId: teams[conIdx].id,
+          proTeamName: teams[proIdx].name,
+          conTeamName: teams[conIdx].name,
+          proTeamInstitution: teams[proIdx].institution,
+          conTeamInstitution: teams[conIdx].institution,
+          topicId: `atopic_${topicIdx}`,
+          topicTitle: ARCHIVE_TOPICS[topicIdx].title,
+          topicProSide: ARCHIVE_TOPICS[topicIdx].pro,
+          topicConSide: ARCHIVE_TOPICS[topicIdx].con,
+          judgeIds,
+          judgeNames,
+          status: 'finished',
+          winner,
+          startedAt: baseTime + (round - 1) * 86400000 * 3 + m * 5400000,
+          finishedAt: baseTime + (round - 1) * 86400000 * 3 + m * 5400000 + 5400000,
+          scores: {
+            matchId: `am_${tournamentIdx}_${matchCounter}`,
+            judgeScores: [],
+            proTeamTotal: 75 + Math.floor(Math.random() * 20),
+            conTeamTotal: 75 + Math.floor(Math.random() * 20),
+            playerScores: [],
+          },
+        });
+      }
+    }
+  }
+
+  return matches;
+};
+
+export const buildArchivedTournaments = (): ArchivedTournament[] => {
+  return ARCHIVE_TOURNAMENT_DATA.map((t, i) => {
+    const teamCount = t.type === 'single_elimination'
+      ? Math.pow(2, t.totalRounds)
+      : t.type === 'round_robin'
+      ? 8
+      : 12;
+
+    const teams = buildArchivedTeams(teamCount, i);
+    const matches = buildArchivedMatches(teams, t, i);
+
+    const sortedTeams = [...teams].sort((a, b) => {
+      if (b.wins !== a.wins) return b.wins - a.wins;
+      return b.draws - a.draws;
+    });
+
+    return {
+      id: `arch_${i}`,
+      name: t.name,
+      format: t.format,
+      type: t.type,
+      season: t.season,
+      year: t.year,
+      totalRounds: t.totalRounds,
+      totalMatches: matches.length,
+      judgesPerMatch: 3,
+      startDate: matches[0]?.startedAt ?? Date.now(),
+      endDate: matches[matches.length - 1]?.finishedAt ?? Date.now(),
+      description: t.description,
+      championTeamId: sortedTeams[0]?.id,
+      championTeamName: sortedTeams[0]?.name,
+      runnerUpTeamId: sortedTeams[1]?.id,
+      runnerUpTeamName: sortedTeams[1]?.name,
+      teams,
+      matches,
+    };
+  });
 };

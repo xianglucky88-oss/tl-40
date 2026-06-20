@@ -241,3 +241,79 @@ export interface DanmakuChannelMessage {
   matchId: string;
   timestamp: number;
 }
+
+export interface ArchivedMatch {
+  id: string;
+  tournamentId: string;
+  round: number;
+  matchNumber: number;
+  proTeamId: string;
+  conTeamId: string;
+  proTeamName: string;
+  conTeamName: string;
+  proTeamInstitution: string;
+  conTeamInstitution: string;
+  topicId: string;
+  topicTitle: string;
+  topicProSide: string;
+  topicConSide: string;
+  judgeIds: string[];
+  judgeNames: string[];
+  status: MatchStatus;
+  winner?: Winner;
+  startedAt: number;
+  finishedAt: number;
+  scores?: MatchScore;
+  stageRecords?: DebateStageConfig[];
+}
+
+export interface ArchivedTeam {
+  id: string;
+  name: string;
+  institution: string;
+  players: {
+    id: string;
+    name: string;
+    role: string;
+    avgScore: number;
+    totalMatches: number;
+    mvpCount: number;
+  }[];
+  finalRank?: number;
+  wins: number;
+  losses: number;
+  draws: number;
+}
+
+export interface ArchivedTournament {
+  id: string;
+  name: string;
+  format: DebateFormat;
+  type: TournamentType;
+  season: string;
+  year: number;
+  totalRounds: number;
+  totalMatches: number;
+  judgesPerMatch: number;
+  startDate: number;
+  endDate: number;
+  description?: string;
+  championTeamId?: string;
+  championTeamName?: string;
+  runnerUpTeamId?: string;
+  runnerUpTeamName?: string;
+  mvpPlayerId?: string;
+  mvpPlayerName?: string;
+  teams: ArchivedTeam[];
+  matches: ArchivedMatch[];
+}
+
+export interface ArchiveFilter {
+  year?: number;
+  season?: string;
+  format?: DebateFormat;
+  type?: TournamentType;
+  keyword?: string;
+}
+
+export type ArchiveViewMode = 'timeline' | 'grid' | 'list';
