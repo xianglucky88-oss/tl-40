@@ -14,6 +14,8 @@ import DanmakuSendPage from "@/pages/DanmakuSendPage";
 import ArchivePage from "@/pages/ArchivePage";
 import ArchivedTournamentDetailPage from "@/pages/ArchivedTournamentDetailPage";
 import MatchArchiveDetailPage from "@/pages/MatchArchiveDetailPage";
+import PlayersPage from "@/pages/PlayersPage";
+import PlayerProfilePage from "@/pages/PlayerProfilePage";
 
 export default function App() {
   return (
@@ -35,6 +37,8 @@ export default function App() {
                 <Route path="/judge" element={<JudgeScoringListPage />} />
                 <Route path="/judge/:matchId" element={<JudgeScoringPage />} />
                 <Route path="/ranking" element={<RankingPage />} />
+                <Route path="/players" element={<PlayersPage />} />
+                <Route path="/player/:playerId" element={<PlayerProfilePage />} />
                 <Route path="/archive" element={<ArchivePage />} />
                 <Route path="/archive/:id" element={<ArchivedTournamentDetailPage />} />
                 <Route path="/archive/:tournamentId/match/:matchId" element={<MatchArchiveDetailPage />} />

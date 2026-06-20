@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Trophy, Users, Medal, FileDown, RefreshCw, BarChart3, User } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Trophy, Users, Medal, FileDown, RefreshCw, BarChart3, User, ChevronRight } from 'lucide-react';
 import { useDebateStore } from '@/store/debateStore';
 import RankBadge from '@/components/ui/RankBadge';
 import { cn } from '@/lib/utils';
@@ -9,6 +10,7 @@ import {
 } from 'recharts';
 
 export default function RankingPage() {
+  const navigate = useNavigate();
   const store = useDebateStore();
   const [activeTab, setActiveTab] = useState<'teams' | 'players'>('teams');
   const [refreshKey, setRefreshKey] = useState(0);
@@ -178,13 +180,15 @@ export default function RankingPage() {
                     <th className="px-4 py-3 text-center">MVP</th>
                     <th className="px-4 py-3 text-center">总得分</th>
                     <th className="px-4 py-3 text-center">平均分</th>
+                    <th className="px-4 py-3 text-right"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {playerRankings.map((r) => (
                     <tr
                       key={r.playerId}
-                      className={cn('border-t border-navy-100 transition-colors hover:bg-gold-50/40', playerRowHighlight(r.rank))}
+                      onClick={() => navigate(`/player/${r.playerId}`)}
+                      className={cn('border-t border-navy-100 transition-colors hover:bg-gold-50/40 cursor-pointer', playerRowHighlight(r.rank))}
                     >
                       <td className="px-4 py-3"><RankBadge rank={r.rank ?? 0} /></td>
                       <td className="px-4 py-3">
@@ -204,6 +208,9 @@ export default function RankingPage() {
                       </td>
                       <td className="px-4 py-3 text-center font-bold text-navy-900">{r.totalScore.toFixed(1)}</td>
                       <td className="px-4 py-3 text-center text-gold-700 font-semibold">{r.avgScore.toFixed(1)}</td>
+                      <td className="px-4 py-3 text-right">
+                        <ChevronRight className="w-4 h-4 text-navy-300 inline" />
+                      </td>
                     </tr>
                   ))}
                 </tbody>

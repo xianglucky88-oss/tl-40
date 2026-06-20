@@ -503,3 +503,149 @@ export const calculatePlayerRankings = (
 
   return rankings.map((r, i) => ({ ...r, rank: i + 1 }));
 };
+
+import type {
+  PlayerDetail,
+  PlayerMatchRecord,
+  PlayerRoleStat,
+  PlayerScoreTrend,
+  Topic,
+  TournamentConfig,
+} from '@/types';
+
+export const calculatePlayerDetail = (
+  playerId: string,
+  matches: MatchPairing[],
+  teams: Team[],
+  topics: Topic[],
+  tournament: TournamentConfig
+): PlayerDetail | null => {
+  let player: Player | undefined;
+  let team: Team | undefined;
+  for (const t of teams) {
+    const p = t.players.find((pp) => pp.id === playerId);
+    if (p) {
+      player = p;
+      team = t;
+      break;
+    }
+  }
+  if (!player || !team) return null;
+
+  const matchRecords: PlayerMatchRecord[] = [];
+  let wins = 0;
+  let losses = 0;
+  let draws = 0;
+  let totalScore = 0;
+  let mvpCount = 0;
+  let highestScore = 0;
+  let lowestScore = Infinity;
+  const roleStatMap: Record<string, { total: number; count: number }> = {};
+
+  const finishedMatches = matches.filter((m) => m.status === 'finished' && m.scores);
+
+  finishedMatches.forEach((match) => {
+    const scores = match.scores!;
+    const playerScoreEntry = scores.playerScores.find((ps) => ps.playerId === playerId);
+    if (!playerScoreEntry) return;
+
+    const isPro = match.proTeamId === team.id;
+    const isCon = match.conTeamId === team.id;
+    if (!isPro && !isCon) return;
+
+    const side: 'pro' | 'con' = isPro ? 'pro' : 'con';
+    const opponentTeamId = isPro ? match.conTeamId : match.proTeamId;
+    const opponentTeam = teams.find((t) => t.id === opponentTeamId);
+    const topic = topics.find((t) => t.id === match.topicId);
+
+    const isWin = match.winner === side;
+    const isDraw = match.winner === 'draw';
+    const isMVP = scores.mvpPlayerId === playerId;
+
+    const score = playerScoreEntry.avgScore;
+    totalScore += score;
+    if (score > highestScore) highestScore = score;
+    if (score < lowestScore) lowestScore = score;
+    if (isMVP) mvpCount++;
+    if (isWin) wins++;
+    else if (isDraw) draws++;
+    else losses++;
+
+    const role = player!.role;
+    if (!roleStatMap[role]) {
+      roleStatMap[role] = { total: 0, count: 0 };
+    }
+    roleStatMap[role].total += score;
+    roleStatMap[role].count++;
+
+    matchRecords.push({
+      matchId: match.id,
+      tournamentId: tournament.id,
+      tournamentName: tournament.name,
+      round: match.round,
+      matchNumber: match.matchNumber,
+      topicTitle: topic?.title ?? '未知辩题',
+      side,
+      teamName: team.name,
+      opponentTeamName: opponentTeam?.name ?? '未知队伍',
+      score,
+      isMVP,
+      isWin,
+      isDraw,
+      date: match.finishedAt ?? 0,
+    });
+  });
+
+  matchRecords.sort((a, b) => a.date - b.date);
+
+  const totalMatches = matchRecords.length;
+  const avgScore = totalMatches > 0 ? totalScore / totalMatches : 0;
+  const winRate = totalMatches > 0 ? (wins + draws * 0.5) / totalMatches : 0;
+  const mvpRate = totalMatches > 0 ? mvpCount / totalMatches : 0;
+
+  const roleStats: PlayerRoleStat[] = Object.entries(roleStatMap).map(([role, stat]) => ({
+    role,
+    count: stat.count,
+    avgScore: stat.count > 0 ? stat.total / stat.count : 0,
+  }));
+
+  const scoreTrend: PlayerScoreTrend[] = matchRecords.map((record, index) => {
+    const runningAvg = matchRecords
+      .slice(0, index + 1)
+      .reduce((sum, r) => sum + r.score, 0) / (index + 1);
+    return {
+      matchIndex: index + 1,
+      matchLabel: `第${record.round}轮`,
+      score: Number(record.score.toFixed(1)),
+      avgScore: Number(runningAvg.toFixed(1)),
+    };
+  });
+
+  const playerRankings = calculatePlayerRankings(matches, teams);
+  const ranking = playerRankings.find((r) => r.playerId === playerId);
+
+  return {
+    playerId: player.id,
+    playerName: player.name,
+    teamId: team.id,
+    teamName: team.name,
+    institution: team.institution,
+    role: player.role,
+    contact: player.contact,
+    totalMatches,
+    wins,
+    losses,
+    draws,
+    winRate,
+    totalScore,
+    avgScore,
+    highestScore: totalMatches > 0 ? highestScore : 0,
+    lowestScore: totalMatches > 0 ? lowestScore : 0,
+    mvpCount,
+    mvpRate,
+    rank: ranking?.rank,
+    roleStats,
+    scoreTrend,
+    matchRecords,
+  };
+};

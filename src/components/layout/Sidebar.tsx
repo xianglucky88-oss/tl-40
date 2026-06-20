@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Medal,
   Archive,
+  User,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -30,6 +31,7 @@ const navItems: NavItem[] = [
   { path: '/live', name: '比赛现场', icon: Timer },
   { path: '/judge', name: '评委打分', icon: Award },
   { path: '/ranking', name: '成绩排行', icon: BarChart3 },
+  { path: '/players', name: '辩手档案', icon: User },
   { path: '/archive', name: '历史档案', icon: Archive },
 ];
 

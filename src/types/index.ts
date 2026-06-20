@@ -201,6 +201,61 @@ export interface PlayerRanking {
   rank?: number;
 }
 
+export interface PlayerMatchRecord {
+  matchId: string;
+  tournamentId: string;
+  tournamentName: string;
+  round: number;
+  matchNumber: number;
+  topicTitle: string;
+  side: 'pro' | 'con';
+  teamName: string;
+  opponentTeamName: string;
+  score: number;
+  isMVP: boolean;
+  isWin: boolean;
+  isDraw: boolean;
+  date: number;
+}
+
+export interface PlayerRoleStat {
+  role: string;
+  count: number;
+  avgScore: number;
+}
+
+export interface PlayerScoreTrend {
+  matchIndex: number;
+  matchLabel: string;
+  score: number;
+  avgScore: number;
+}
+
+export interface PlayerDetail {
+  playerId: string;
+  playerName: string;
+  teamId: string;
+  teamName: string;
+  institution: string;
+  role: string;
+  contact?: string;
+  totalMatches: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  winRate: number;
+  totalScore: number;
+  avgScore: number;
+  highestScore: number;
+  lowestScore: number;
+  mvpCount: number;
+  mvpRate: number;
+  rank?: number;
+  roleStats: PlayerRoleStat[];
+  scoreTrend: PlayerScoreTrend[];
+  matchRecords: PlayerMatchRecord[];
+}
+
 export interface TimerStageState {
   stageIndex: number;
   stageConfig: DebateStageConfig;

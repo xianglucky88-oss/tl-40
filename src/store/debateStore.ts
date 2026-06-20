@@ -39,6 +39,7 @@ import {
   determineWinner,
   calculateTeamRankings,
   calculatePlayerRankings,
+  calculatePlayerDetail,
   uid,
   finalizeJudgeScore,
   createEmptyJudgeScore,
@@ -105,6 +106,7 @@ interface DebateState {
 
   teamRankings: () => ReturnType<typeof calculateTeamRankings>;
   playerRankings: () => ReturnType<typeof calculatePlayerRankings>;
+  getPlayerDetail: (playerId: string) => ReturnType<typeof calculatePlayerDetail>;
 
   sendDanmaku: (
     matchId: string,
@@ -464,6 +466,8 @@ export const useDebateStore = create<DebateState>()(
 
       teamRankings: () => calculateTeamRankings(get().matches, get().teams),
       playerRankings: () => calculatePlayerRankings(get().matches, get().teams),
+      getPlayerDetail: (playerId) =>
+        calculatePlayerDetail(playerId, get().matches, get().teams, get().topics, get().tournament),
 
       checkDanmakuRateLimit: (matchId, senderName) => {
         const now = Date.now();
