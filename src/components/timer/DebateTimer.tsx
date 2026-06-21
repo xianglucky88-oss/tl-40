@@ -15,6 +15,7 @@ import {
   getStageSideBg,
 } from '@/engines/timerEngine';
 import { getFormatRules } from '@/engines/formatRules';
+import MatchProgressRing from './MatchProgressRing';
 
 interface DebateTimerProps {
   matchId?: string;
@@ -141,59 +142,65 @@ export const DebateTimer = ({ matchId }: DebateTimerProps) => {
 
   return (
     <div className="flex flex-col items-center gap-8">
-      <div className="relative flex items-center justify-center" style={{ width: RING_SIZE, height: RING_SIZE }}>
-        <svg
-          width={RING_SIZE}
-          height={RING_SIZE}
-          className={`absolute inset-0 -rotate-90 ${urgent ? 'timer-urgent' : currentTimer.isRunning ? 'timer-pulse' : ''}`}
-        >
-          <circle
-            cx={RING_SIZE / 2}
-            cy={RING_SIZE / 2}
-            r={RING_RADIUS}
-            fill="none"
-            stroke="#E8DFC7"
-            strokeWidth={RING_STROKE}
-          />
-          <circle
-            cx={RING_SIZE / 2}
-            cy={RING_SIZE / 2}
-            r={RING_RADIUS}
-            fill="none"
-            stroke={ringColor}
-            strokeWidth={RING_STROKE}
-            strokeLinecap="round"
-            strokeDasharray={RING_CIRCUMFERENCE}
-            strokeDashoffset={dashOffset}
-            style={{ transition: 'stroke-dashoffset 0.8s ease-out, stroke 0.5s ease' }}
-          />
-        </svg>
-
-        <div className="relative flex flex-col items-center gap-4 z-10 px-8 text-center">
-          <div
-            className={`px-4 py-1.5 rounded-full text-xs font-semibold border ${sideBgClass} ${sideColorClass}`}
+      <div className="flex items-center gap-8">
+        <div className="relative flex items-center justify-center" style={{ width: RING_SIZE, height: RING_SIZE }}>
+          <svg
+            width={RING_SIZE}
+            height={RING_SIZE}
+            className={`absolute inset-0 -rotate-90 ${urgent ? 'timer-urgent' : currentTimer.isRunning ? 'timer-pulse' : ''}`}
           >
-            阶段 {currentTimer.current.stageIndex + 1} / {getFormatRules(currentTimer.format).stages.length}
-          </div>
+            <circle
+              cx={RING_SIZE / 2}
+              cy={RING_SIZE / 2}
+              r={RING_RADIUS}
+              fill="none"
+              stroke="#E8DFC7"
+              strokeWidth={RING_STROKE}
+            />
+            <circle
+              cx={RING_SIZE / 2}
+              cy={RING_SIZE / 2}
+              r={RING_RADIUS}
+              fill="none"
+              stroke={ringColor}
+              strokeWidth={RING_STROKE}
+              strokeLinecap="round"
+              strokeDasharray={RING_CIRCUMFERENCE}
+              strokeDashoffset={dashOffset}
+              style={{ transition: 'stroke-dashoffset 0.8s ease-out, stroke 0.5s ease' }}
+            />
+          </svg>
 
-          <div
-            className={`font-mono font-bold tracking-tight leading-none ${
-              urgent ? 'text-red-500' : 'text-navy-900'
-            }`}
-            style={{ fontSize: '5.5rem' }}
-          >
-            {timeDisplay}
-          </div>
-
-          <div className={`font-serif text-xl font-semibold ${sideColorClass}`}>
-            {currentTimer.current.stageConfig.name}
-          </div>
-
-          {currentTimer.isFinished && (
-            <div className="badge-gold mt-2">
-              辩论计时结束
+          <div className="relative flex flex-col items-center gap-4 z-10 px-8 text-center">
+            <div
+              className={`px-4 py-1.5 rounded-full text-xs font-semibold border ${sideBgClass} ${sideColorClass}`}
+            >
+              阶段 {currentTimer.current.stageIndex + 1} / {getFormatRules(currentTimer.format).stages.length}
             </div>
-          )}
+
+            <div
+              className={`font-mono font-bold tracking-tight leading-none ${
+                urgent ? 'text-red-500' : 'text-navy-900'
+              }`}
+              style={{ fontSize: '5.5rem' }}
+            >
+              {timeDisplay}
+            </div>
+
+            <div className={`font-serif text-xl font-semibold ${sideColorClass}`}>
+              {currentTimer.current.stageConfig.name}
+            </div>
+
+            {currentTimer.isFinished && (
+              <div className="badge-gold mt-2">
+                辩论计时结束
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex-shrink-0">
+          <MatchProgressRing format={currentTimer.format} size={240} />
         </div>
       </div>
 
