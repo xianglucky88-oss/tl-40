@@ -21,8 +21,8 @@ interface DebateTimerProps {
   matchId?: string;
 }
 
-const RING_SIZE = 480;
-const RING_STROKE = 16;
+const RING_SIZE = 360;
+const RING_STROKE = 14;
 const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
@@ -134,16 +134,16 @@ export const DebateTimer = ({ matchId }: DebateTimerProps) => {
 
   if (!currentTimer) {
     return (
-      <div className="flex items-center justify-center h-96 text-navy-500 font-medium">
+      <div className="flex items-center justify-center h-80 text-navy-500 font-medium">
         正在初始化计时器...
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col items-center gap-8">
-      <div className="flex items-center gap-8">
-        <div className="relative flex items-center justify-center" style={{ width: RING_SIZE, height: RING_SIZE }}>
+    <div className="flex flex-col items-center gap-6 w-full">
+      <div className="flex flex-col lg:flex-row items-center justify-center gap-6 w-full">
+        <div className="relative flex items-center justify-center flex-shrink-0" style={{ width: RING_SIZE, height: RING_SIZE }}>
           <svg
             width={RING_SIZE}
             height={RING_SIZE}
@@ -171,9 +171,9 @@ export const DebateTimer = ({ matchId }: DebateTimerProps) => {
             />
           </svg>
 
-          <div className="relative flex flex-col items-center gap-4 z-10 px-8 text-center">
+          <div className="relative flex flex-col items-center gap-3 z-10 px-6 text-center">
             <div
-              className={`px-4 py-1.5 rounded-full text-xs font-semibold border ${sideBgClass} ${sideColorClass}`}
+              className={`px-3.5 py-1 rounded-full text-[11px] font-semibold border ${sideBgClass} ${sideColorClass}`}
             >
               阶段 {currentTimer.current.stageIndex + 1} / {getFormatRules(currentTimer.format).stages.length}
             </div>
@@ -182,17 +182,17 @@ export const DebateTimer = ({ matchId }: DebateTimerProps) => {
               className={`font-mono font-bold tracking-tight leading-none ${
                 urgent ? 'text-red-500' : 'text-navy-900'
               }`}
-              style={{ fontSize: '5.5rem' }}
+              style={{ fontSize: '4rem' }}
             >
               {timeDisplay}
             </div>
 
-            <div className={`font-serif text-xl font-semibold ${sideColorClass}`}>
+            <div className={`font-serif text-base font-semibold ${sideColorClass}`}>
               {currentTimer.current.stageConfig.name}
             </div>
 
             {currentTimer.isFinished && (
-              <div className="badge-gold mt-2">
+              <div className="badge-gold mt-1 text-xs">
                 辩论计时结束
               </div>
             )}
@@ -200,38 +200,38 @@ export const DebateTimer = ({ matchId }: DebateTimerProps) => {
         </div>
 
         <div className="flex-shrink-0">
-          <MatchProgressRing format={currentTimer.format} size={240} />
+          <MatchProgressRing format={currentTimer.format} size={190} />
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center justify-center gap-2.5">
         <button
           type="button"
           onClick={handlePrev}
-          className="btn-secondary"
+          className="btn-secondary !py-2 !px-3"
           disabled={currentTimer.current.stageIndex === 0}
           title="上一阶段 (P)"
         >
-          <SkipBack className="w-4 h-4" />
-          上一阶段
+          <SkipBack className="w-3.5 h-3.5" />
+          <span className="text-sm">上一阶段</span>
         </button>
 
         <button
           type="button"
           onClick={handleToggle}
-          className="btn-primary px-8"
+          className="btn-primary !py-2 px-7"
           disabled={currentTimer.isFinished}
           title={currentTimer.isRunning ? '暂停 (Space)' : '开始 (Space)'}
         >
           {currentTimer.isRunning ? (
             <>
               <Pause className="w-4 h-4" />
-              暂停
+              <span className="text-sm">暂停</span>
             </>
           ) : (
             <>
               <Play className="w-4 h-4" />
-              开始
+              <span className="text-sm">开始</span>
             </>
           )}
         </button>
@@ -239,41 +239,41 @@ export const DebateTimer = ({ matchId }: DebateTimerProps) => {
         <button
           type="button"
           onClick={handleNext}
-          className="btn-secondary"
+          className="btn-secondary !py-2 !px-3"
           disabled={currentTimer.isFinished}
           title="下一阶段 (N)"
         >
-          下一阶段
-          <SkipForward className="w-4 h-4" />
+          <span className="text-sm">下一阶段</span>
+          <SkipForward className="w-3.5 h-3.5" />
         </button>
 
         <button
           type="button"
           onClick={handleReset}
-          className="btn-secondary"
+          className="btn-secondary !py-2 !px-3"
           title="重置当前阶段 (R)"
         >
-          <RotateCcw className="w-4 h-4" />
-          重置
+          <RotateCcw className="w-3.5 h-3.5" />
+          <span className="text-sm">重置</span>
         </button>
       </div>
 
-      <div className="flex flex-wrap justify-center gap-3 text-xs text-navy-500">
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-navy-50">
-          <kbd className="font-mono bg-white border border-navy-200 px-1.5 py-0.5 rounded">Space</kbd>
-          开始/暂停
+      <div className="flex flex-wrap justify-center gap-2 text-xs text-navy-500">
+        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-navy-50">
+          <kbd className="font-mono bg-white border border-navy-200 px-1.5 py-0.5 rounded text-[11px]">Space</kbd>
+          <span className="text-[11px]">开始/暂停</span>
         </span>
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-navy-50">
-          <kbd className="font-mono bg-white border border-navy-200 px-1.5 py-0.5 rounded">N</kbd>
-          下一阶段
+        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-navy-50">
+          <kbd className="font-mono bg-white border border-navy-200 px-1.5 py-0.5 rounded text-[11px]">N</kbd>
+          <span className="text-[11px]">下一阶段</span>
         </span>
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-navy-50">
-          <kbd className="font-mono bg-white border border-navy-200 px-1.5 py-0.5 rounded">P</kbd>
-          上一阶段
+        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-navy-50">
+          <kbd className="font-mono bg-white border border-navy-200 px-1.5 py-0.5 rounded text-[11px]">P</kbd>
+          <span className="text-[11px]">上一阶段</span>
         </span>
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-navy-50">
-          <kbd className="font-mono bg-white border border-navy-200 px-1.5 py-0.5 rounded">R</kbd>
-          重置阶段
+        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-navy-50">
+          <kbd className="font-mono bg-white border border-navy-200 px-1.5 py-0.5 rounded text-[11px]">R</kbd>
+          <span className="text-[11px]">重置阶段</span>
         </span>
       </div>
     </div>
