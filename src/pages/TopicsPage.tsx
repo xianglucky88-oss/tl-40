@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Plus, Pencil, Trash2, BookOpen, Check, ChevronDown, Star, BarChart3 } from 'lucide-react';
+import { Search, Plus, Pencil, Trash2, BookOpen, Check, ChevronDown, Star, BarChart3, GitBranch } from 'lucide-react';
 import { useDebateStore } from '@/store/debateStore';
 import Modal from '@/components/ui/Modal';
 import Empty from '@/components/ui/Empty';
@@ -239,7 +239,13 @@ export default function TopicsPage() {
                     </span>
                   ))}
                 </div>
-                <div className="ml-auto"><Stars level={t.difficulty} /></div>
+                <button
+                  onClick={() => navigate(`/topics/${t.id}`)}
+                  className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-gradient-navy px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
+                >
+                  <GitBranch className="h-3.5 w-3.5" />
+                  论点树
+                </button>
               </div>
             </div>
           ))}

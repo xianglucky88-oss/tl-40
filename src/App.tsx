@@ -4,6 +4,7 @@ import DashboardPage from "@/pages/DashboardPage";
 import TeamsPage from "@/pages/TeamsPage";
 import JudgesPage from "@/pages/JudgesPage";
 import TopicsPage from "@/pages/TopicsPage";
+import TopicDetailPage from "@/pages/TopicDetailPage";
 import TopicAnalyticsPage from "@/pages/TopicAnalyticsPage";
 import TournamentPage from "@/pages/TournamentPage";
 import LiveMatchPage from "@/pages/LiveMatchPage";
@@ -34,6 +35,7 @@ export default function App() {
                 <Route path="/teams" element={<TeamsPage />} />
                 <Route path="/judges" element={<JudgesPage />} />
                 <Route path="/topics/analytics" element={<TopicAnalyticsPage />} />
+                <Route path="/topics/:topicId" element={<TopicDetailPage />} />
                 <Route path="/topics" element={<TopicsPage />} />
                 <Route path="/tournament" element={<TournamentPage />} />
                 <Route path="/live" element={<LiveMatchListPage />} />

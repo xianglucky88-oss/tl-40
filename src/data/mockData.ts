@@ -14,6 +14,8 @@ import {
   PlayerScore,
   JudgeScore,
   MatchScore,
+  ArgumentNode,
+  ArgumentSide,
 } from '@/types';
 import { uid } from '@/engines/scoringEngine';
 import { getFormatRules } from '@/engines/formatRules';
@@ -740,4 +742,183 @@ export const buildArchivedTournaments = (): ArchivedTournament[] => {
       matches,
     };
   });
+};
+
+interface RawArgument {
+  topicId: string;
+  side: ArgumentSide;
+  content: string;
+  author: string;
+  votes: number;
+  children?: RawArgument[];
+}
+
+const ARGUMENT_DATA: RawArgument[] = [
+  {
+    topicId: 'topic_0',
+    side: 'pro',
+    content: 'AI 大幅提升生产力，解放人类从事创造性工作',
+    author: '李明哲',
+    votes: 42,
+    children: [
+      {
+        topicId: 'topic_0',
+        side: 'pro',
+        content: '自动化流水线提高工业产出 300%，历史已证明',
+        author: '王思远',
+        votes: 28,
+      },
+      {
+        topicId: 'topic_0',
+        side: 'pro',
+        content: '医疗 AI 辅助诊断准确率已超过资深医师',
+        author: '陈雨晴',
+        votes: 35,
+        children: [
+          {
+            topicId: 'topic_0',
+            side: 'pro',
+            content: '斯坦福 Med-PaLM 在多项医学考试中达到专家水平',
+            author: '周博文',
+            votes: 19,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    topicId: 'topic_0',
+    side: 'pro',
+    content: 'AI 推动科学发现加速，如 AlphaFold 破解蛋白质结构',
+    author: '张静怡',
+    votes: 38,
+  },
+  {
+    topicId: 'topic_0',
+    side: 'con',
+    content: '大规模失业将引发社会动荡，缺乏过渡机制',
+    author: '赵文博',
+    votes: 36,
+    children: [
+      {
+        topicId: 'topic_0',
+        side: 'con',
+        content: '麦肯锡预测 2030 年前 8 亿岗位将被自动化替代',
+        author: '吴嘉慧',
+        votes: 24,
+      },
+    ],
+  },
+  {
+    topicId: 'topic_0',
+    side: 'con',
+    content: '算法偏见与黑箱决策加剧社会不公',
+    author: '孙浩宇',
+    votes: 31,
+    children: [
+      {
+        topicId: 'topic_0',
+        side: 'con',
+        content: '亚马逊招聘 AI 被曝歧视女性简历',
+        author: '林诗涵',
+        votes: 22,
+      },
+    ],
+  },
+  {
+    topicId: 'topic_0',
+    side: 'con',
+    content: 'AI 武器化风险不可控，存在生存威胁',
+    author: '黄俊杰',
+    votes: 27,
+  },
+  {
+    topicId: 'topic_1',
+    side: 'pro',
+    content: '英雄主义在危机时刻提供关键行动力',
+    author: '范雨欣',
+    votes: 25,
+  },
+  {
+    topicId: 'topic_1',
+    side: 'pro',
+    content: '社会需要精神标杆引领价值导向',
+    author: '徐浩然',
+    votes: 19,
+  },
+  {
+    topicId: 'topic_1',
+    side: 'con',
+    content: '集体主义强调协作，更符合复杂系统治理需求',
+    author: '马晓彤',
+    votes: 22,
+  },
+  {
+    topicId: 'topic_1',
+    side: 'con',
+    content: '英雄崇拜容易滑向个人崇拜和人治风险',
+    author: '何宇辰',
+    votes: 18,
+  },
+  {
+    topicId: 'topic_2',
+    side: 'pro',
+    content: '网络游戏成瘾严重影响未成年人身心健康',
+    author: '曾雅琪',
+    votes: 33,
+  },
+  {
+    topicId: 'topic_2',
+    side: 'pro',
+    content: '未成年人自控力尚未成熟，需要家长与社会共同保护',
+    author: '邓子轩',
+    votes: 29,
+  },
+  {
+    topicId: 'topic_2',
+    side: 'con',
+    content: '一刀切禁令侵犯娱乐权，且易催生地下灰色产业',
+    author: '韩梦瑶',
+    votes: 31,
+  },
+  {
+    topicId: 'topic_2',
+    side: 'con',
+    content: '分级制度与时间管控比全面禁止更科学合理',
+    author: '冯逸飞',
+    votes: 27,
+  },
+];
+
+const flattenArgs = (
+  list: RawArgument[],
+  parentId: string | null = null,
+  offset = 0
+): ArgumentNode[] => {
+  const result: ArgumentNode[] = [];
+  let idx = 0;
+  for (const raw of list) {
+    const id = uid() + (offset + idx);
+    result.push({
+      id,
+      topicId: raw.topicId,
+      side: raw.side,
+      parentId,
+      content: raw.content,
+      author: raw.author,
+      votes: raw.votes,
+      voters: Array.from({ length: raw.votes }, (_, i) => `voter_${id}_${i}`),
+      children: [],
+      createdAt: now - 1000 * 60 * 60 * (offset + idx + 1),
+    });
+    if (raw.children && raw.children.length > 0) {
+      result.push(...flattenArgs(raw.children, id, offset + idx + 100));
+    }
+    idx++;
+  }
+  return result;
+};
+
+export const buildInitialArguments = (): ArgumentNode[] => {
+  return flattenArgs(ARGUMENT_DATA);
 };

@@ -17,6 +17,9 @@ import {
   ArchiveFilter,
   ArchivedMatch,
   TournamentType,
+  ArgumentNode,
+  ArgumentSide,
+  ArgumentTree,
 } from '@/types';
 import {
   buildInitialTeams,
@@ -25,6 +28,7 @@ import {
   buildInitialTournament,
   buildSampleMatches,
   buildArchivedTournaments,
+  buildInitialArguments,
 } from '@/data/mockData';
 import {
   generateSingleElimination,
@@ -129,6 +133,19 @@ interface DebateState {
   getArchiveFormats: () => DebateFormat[];
   getArchiveTypes: () => TournamentType[];
   archiveCurrentTournament: () => { success: boolean; error?: string; archivedId?: string };
+
+  arguments: ArgumentNode[];
+  addArgument: (
+    topicId: string,
+    side: ArgumentSide,
+    content: string,
+    author: string,
+    parentId?: string | null
+  ) => ArgumentNode;
+  updateArgument: (id: string, content: string) => void;
+  removeArgument: (id: string) => void;
+  voteArgument: (id: string, voterName: string) => { success: boolean; voted: boolean };
+  getArgumentTreeByTopicId: (topicId: string) => ArgumentTree;
 }
 
 const defaultTournament = buildInitialTournament();
@@ -137,6 +154,7 @@ const defaultJudges = buildInitialJudges();
 const defaultTopics = buildInitialTopics();
 const defaultMatches = buildSampleMatches(defaultTeams, defaultJudges, defaultTopics, defaultTournament);
 const defaultArchivedTournaments = buildArchivedTournaments();
+const defaultArguments = buildInitialArguments();
 
 const danmakuChannel =
   typeof BroadcastChannel !== 'undefined'
@@ -160,6 +178,7 @@ export const useDebateStore = create<DebateState>()(
       danmakuEnabledByMatch: {},
 
       archivedTournaments: defaultArchivedTournaments,
+      arguments: defaultArguments,
 
       getAllJudgesSubmitted: (matchId: string): boolean => {
         const s = get();
@@ -808,6 +827,85 @@ export const useDebateStore = create<DebateState>()(
 
         return { success: true, archivedId: archivedTournament.id };
       },
+
+      addArgument: (topicId, side, content, author, parentId = null) => {
+        const newNode: ArgumentNode = {
+          id: uid(),
+          topicId,
+          side,
+          parentId,
+          content: content.trim(),
+          author: author.trim() || '匿名用户',
+          votes: 0,
+          voters: [],
+          children: [],
+          createdAt: Date.now(),
+        };
+        set((s) => ({ arguments: [...s.arguments, newNode] }));
+        return newNode;
+      },
+
+      updateArgument: (id, content) => {
+        set((s) => ({
+          arguments: s.arguments.map((a) =>
+            a.id === id ? { ...a, content: content.trim() } : a
+          ),
+        }));
+      },
+
+      removeArgument: (id) => {
+        const collectIds = (nodeId: string, list: ArgumentNode[]): string[] => {
+          const ids = [nodeId];
+          list
+            .filter((a) => a.parentId === nodeId)
+            .forEach((child) => ids.push(...collectIds(child.id, list)));
+          return ids;
+        };
+        set((s) => {
+          const toRemove = new Set(collectIds(id, s.arguments));
+          return { arguments: s.arguments.filter((a) => !toRemove.has(a.id)) };
+        });
+      },
+
+      voteArgument: (id, voterName) => {
+        const voter = voterName.trim() || '匿名用户';
+        const s = get();
+        const node = s.arguments.find((a) => a.id === id);
+        if (!node) return { success: false, voted: false };
+        const hasVoted = node.voters.includes(voter);
+        set((st) => ({
+          arguments: st.arguments.map((a) => {
+            if (a.id !== id) return a;
+            if (hasVoted) {
+              return {
+                ...a,
+                votes: Math.max(0, a.votes - 1),
+                voters: a.voters.filter((v) => v !== voter),
+              };
+            }
+            return {
+              ...a,
+              votes: a.votes + 1,
+              voters: [...a.voters, voter],
+            };
+          }),
+        }));
+        return { success: true, voted: !hasVoted };
+      },
+
+      getArgumentTreeByTopicId: (topicId): ArgumentTree => {
+        const all = get().arguments.filter((a) => a.topicId === topicId);
+        const buildTree = (parentId: string | null): ArgumentNode[] =>
+          all
+            .filter((a) => a.parentId === parentId)
+            .sort((a, b) => b.votes - a.votes || b.createdAt - a.createdAt)
+            .map((node) => ({ ...node, children: buildTree(node.id) }));
+        return {
+          topicId,
+          proRoots: buildTree(null).filter((n) => n.side === 'pro'),
+          conRoots: buildTree(null).filter((n) => n.side === 'con'),
+        };
+      },
     }),
     {
       name: 'debate-tournament-store',
@@ -824,6 +922,7 @@ export const useDebateStore = create<DebateState>()(
         danmakuList: state.danmakuList,
         danmakuEnabledByMatch: state.danmakuEnabledByMatch,
         archivedTournaments: state.archivedTournaments,
+        arguments: state.arguments,
       }),
     }
   )

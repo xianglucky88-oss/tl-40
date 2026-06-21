@@ -405,3 +405,24 @@ export interface AIDebateState {
   isAIGenerating: boolean;
   roundNumber: number;
 }
+
+export type ArgumentSide = 'pro' | 'con';
+
+export interface ArgumentNode {
+  id: string;
+  topicId: string;
+  side: ArgumentSide;
+  parentId: string | null;
+  content: string;
+  author: string;
+  votes: number;
+  voters: string[];
+  children: ArgumentNode[];
+  createdAt: number;
+}
+
+export interface ArgumentTree {
+  topicId: string;
+  proRoots: ArgumentNode[];
+  conRoots: ArgumentNode[];
+}
