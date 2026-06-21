@@ -343,14 +343,14 @@ const ARCHIVE_PLAYER_NAMES = [
 ];
 
 const ARCHIVE_TOPICS = [
-  { title: '人工智能的发展对人类未来利大于弊/弊大于利', pro: '利大于弊', con: '弊大于利' },
-  { title: '当今社会，更需要英雄主义/集体主义', pro: '更需要英雄主义', con: '更需要集体主义' },
-  { title: '应该全面禁止/不应该全面禁止未成年人网络游戏', pro: '应该全面禁止', con: '不应该全面禁止' },
-  { title: '短视频的流行提升/降低了当代人的认知能力', pro: '提升了认知能力', con: '降低了认知能力' },
-  { title: '全球化时代，母语教育比外语教育更/更不重要', pro: '母语教育更重要', con: '外语教育更重要' },
-  { title: '应该/不应该在全国推行免费大学教育', pro: '应该推行', con: '不应该推行' },
-  { title: '科技进步使人更/更不自由', pro: '使人更自由', con: '使人更不自由' },
-  { title: '知识付费能/不能缓解当代年轻人的焦虑', pro: '能缓解焦虑', con: '不能缓解焦虑' },
+  { title: '人工智能的发展对人类未来利大于弊/弊大于利', pro: '利大于弊', con: '弊大于利', cats: ['价值', '政策'] as TopicCat[], difficulty: 3 as const, formats: ['mandarin', 'parliamentary'] as DebateFormat[] },
+  { title: '当今社会，更需要英雄主义/集体主义', pro: '更需要英雄主义', con: '更需要集体主义', cats: ['价值'] as TopicCat[], difficulty: 2 as const, formats: ['mandarin'] as DebateFormat[] },
+  { title: '应该全面禁止/不应该全面禁止未成年人网络游戏', pro: '应该全面禁止', con: '不应该全面禁止', cats: ['政策', '事实'] as TopicCat[], difficulty: 3 as const, formats: ['parliamentary', 'mandarin'] as DebateFormat[] },
+  { title: '短视频的流行提升/降低了当代人的认知能力', pro: '提升了认知能力', con: '降低了认知能力', cats: ['价值', '事实'] as TopicCat[], difficulty: 2 as const, formats: ['mandarin', 'parliamentary'] as DebateFormat[] },
+  { title: '全球化时代，母语教育比外语教育更/更不重要', pro: '母语教育更重要', con: '外语教育更重要', cats: ['价值'] as TopicCat[], difficulty: 3 as const, formats: ['mandarin'] as DebateFormat[] },
+  { title: '应该/不应该在全国推行免费大学教育', pro: '应该推行', con: '不应该推行', cats: ['政策'] as TopicCat[], difficulty: 4 as const, formats: ['parliamentary', 'mandarin'] as DebateFormat[] },
+  { title: '科技进步使人更/更不自由', pro: '使人更自由', con: '使人更不自由', cats: ['价值'] as TopicCat[], difficulty: 4 as const, formats: ['mandarin'] as DebateFormat[] },
+  { title: '知识付费能/不能缓解当代年轻人的焦虑', pro: '能缓解焦虑', con: '不能缓解焦虑', cats: ['事实', '价值'] as TopicCat[], difficulty: 2 as const, formats: ['mandarin', 'parliamentary'] as DebateFormat[] },
 ];
 
 const ARCHIVE_JUDGE_NAMES = [
@@ -555,6 +555,9 @@ const buildArchivedMatches = (
           topicTitle: ARCHIVE_TOPICS[topicIdx].title,
           topicProSide: ARCHIVE_TOPICS[topicIdx].pro,
           topicConSide: ARCHIVE_TOPICS[topicIdx].con,
+          topicCategory: ARCHIVE_TOPICS[topicIdx].cats,
+          topicDifficulty: ARCHIVE_TOPICS[topicIdx].difficulty,
+          topicFormats: ARCHIVE_TOPICS[topicIdx].formats,
           judgeIds,
           judgeNames,
           status: 'finished',
@@ -617,6 +620,9 @@ const buildArchivedMatches = (
           topicTitle: ARCHIVE_TOPICS[topicIdx].title,
           topicProSide: ARCHIVE_TOPICS[topicIdx].pro,
           topicConSide: ARCHIVE_TOPICS[topicIdx].con,
+          topicCategory: ARCHIVE_TOPICS[topicIdx].cats,
+          topicDifficulty: ARCHIVE_TOPICS[topicIdx].difficulty,
+          topicFormats: ARCHIVE_TOPICS[topicIdx].formats,
           judgeIds,
           judgeNames,
           status: 'finished',
@@ -679,6 +685,9 @@ const buildArchivedMatches = (
           topicTitle: ARCHIVE_TOPICS[topicIdx].title,
           topicProSide: ARCHIVE_TOPICS[topicIdx].pro,
           topicConSide: ARCHIVE_TOPICS[topicIdx].con,
+          topicCategory: ARCHIVE_TOPICS[topicIdx].cats,
+          topicDifficulty: ARCHIVE_TOPICS[topicIdx].difficulty,
+          topicFormats: ARCHIVE_TOPICS[topicIdx].formats,
           judgeIds,
           judgeNames,
           status: 'finished',

@@ -313,6 +313,9 @@ export interface ArchivedMatch {
   topicTitle: string;
   topicProSide: string;
   topicConSide: string;
+  topicCategory: TopicCategory[];
+  topicDifficulty: number;
+  topicFormats: DebateFormat[];
   judgeIds: string[];
   judgeNames: string[];
   status: MatchStatus;

@@ -34,7 +34,7 @@ import {
 } from 'lucide-react';
 import { useDebateStore } from '@/store/debateStore';
 import StatCard from '@/components/ui/StatCard';
-import type { TopicCategory, Winner, ArchivedMatch, MatchPairing, Topic } from '@/types';
+import type { TopicCategory, Winner, DebateFormat } from '@/types';
 import { FORMAT_RULES } from '@/engines/formatRules';
 import { cn } from '@/lib/utils';
 
@@ -49,54 +49,21 @@ const PRO_COLOR = '#3265a4';
 const CON_COLOR = '#c2874f';
 const DRAW_COLOR = '#94a3b8';
 
+interface TopicMeta {
+  id: string;
+  title: string;
+  category: TopicCategory[];
+  difficulty: number;
+  formats: DebateFormat[];
+}
+
 interface AllMatch {
   topicId: string;
   winner?: Winner;
 }
 
-function collectAllMatches(
-  matches: MatchPairing[],
-  archivedTournaments: ReturnType<typeof useDebateStore.getState>['archivedTournaments']
-): AllMatch[] {
-  const result: AllMatch[] = [];
-  matches.forEach((m) => {
-    if (m.status === 'finished') {
-      result.push({ topicId: m.topicId, winner: m.winner });
-    }
-  });
-  archivedTournaments.forEach((t) => {
-    t.matches.forEach((m: ArchivedMatch) => {
-      if (m.status === 'finished') {
-        result.push({ topicId: m.topicId, winner: m.winner });
-      }
-    });
-  });
-  return result;
-}
-
-function getTopicByIdSafe(
-  id: string,
-  topics: Topic[],
-  archivedTournaments: ReturnType<typeof useDebateStore.getState>['archivedTournaments']
-): Topic | null {
-  const found = topics.find((t) => t.id === id);
-  if (found) return found;
-  for (const at of archivedTournaments) {
-    for (const m of at.matches) {
-      if (m.topicId === id) {
-        return {
-          id: m.topicId,
-          title: m.topicTitle,
-          proSide: m.topicProSide,
-          conSide: m.topicConSide,
-          category: ['价值'],
-          formats: [],
-          difficulty: 3,
-        };
-      }
-    }
-  }
-  return null;
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
 
 export default function TopicAnalyticsPage() {
@@ -105,10 +72,49 @@ export default function TopicAnalyticsPage() {
   const matches = useDebateStore((s) => s.matches);
   const archivedTournaments = useDebateStore((s) => s.archivedTournaments);
 
-  const allMatches = useMemo(
-    () => collectAllMatches(matches, archivedTournaments),
-    [matches, archivedTournaments]
-  );
+  const topicMap = useMemo(() => {
+    const map = new Map<string, TopicMeta>();
+    topics.forEach((t) => {
+      map.set(t.id, {
+        id: t.id,
+        title: t.title,
+        category: [...t.category],
+        difficulty: t.difficulty,
+        formats: [...t.formats],
+      });
+    });
+    archivedTournaments.forEach((at) => {
+      at.matches.forEach((m) => {
+        if (!map.has(m.topicId)) {
+          map.set(m.topicId, {
+            id: m.topicId,
+            title: m.topicTitle,
+            category: m.topicCategory ?? [],
+            difficulty: m.topicDifficulty ?? 3,
+            formats: m.topicFormats ?? [],
+          });
+        }
+      });
+    });
+    return map;
+  }, [topics, archivedTournaments]);
+
+  const allMatches = useMemo(() => {
+    const result: AllMatch[] = [];
+    matches.forEach((m) => {
+      if (m.status === 'finished') {
+        result.push({ topicId: m.topicId, winner: m.winner });
+      }
+    });
+    archivedTournaments.forEach((t) => {
+      t.matches.forEach((m) => {
+        if (m.status === 'finished') {
+          result.push({ topicId: m.topicId, winner: m.winner });
+        }
+      });
+    });
+    return result;
+  }, [matches, archivedTournaments]);
 
   const stats = useMemo(() => {
     const usedTopicIds = new Set(allMatches.map((m) => m.topicId));
@@ -150,9 +156,9 @@ export default function TopicAnalyticsPage() {
       模拟法庭: 0,
     };
     allMatches.forEach((m) => {
-      const topic = getTopicByIdSafe(m.topicId, topics, archivedTournaments);
-      if (topic) {
-        topic.category.forEach((c) => {
+      const meta = topicMap.get(m.topicId);
+      if (meta) {
+        meta.category.forEach((c) => {
           counts[c]++;
         });
       }
@@ -163,15 +169,15 @@ export default function TopicAnalyticsPage() {
       辩题数: topics.filter((t) => t.category.includes(c)).length,
       fill: CATEGORY_COLORS[c],
     }));
-  }, [allMatches, topics, archivedTournaments]);
+  }, [allMatches, topicMap, topics]);
 
   const difficultyData = useMemo(() => {
     const result = [];
     for (let d = 1; d <= 5; d++) {
       const topicCount = topics.filter((t) => t.difficulty === d).length;
       const usedCount = allMatches.filter((m) => {
-        const t = getTopicByIdSafe(m.topicId, topics, archivedTournaments);
-        return t && t.difficulty === d;
+        const meta = topicMap.get(m.topicId);
+        return meta && meta.difficulty === d;
       }).length;
       result.push({
         name: `★${d}`,
@@ -180,7 +186,7 @@ export default function TopicAnalyticsPage() {
       });
     }
     return result;
-  }, [topics, allMatches, archivedTournaments]);
+  }, [topics, allMatches, topicMap]);
 
   const winBiasData = useMemo(() => {
     return [
@@ -193,22 +199,22 @@ export default function TopicAnalyticsPage() {
   const formatUsageData = useMemo(() => {
     const formatCount: Record<string, number> = {};
     allMatches.forEach((m) => {
-      const topic = getTopicByIdSafe(m.topicId, topics, archivedTournaments);
-      if (topic) {
-        topic.formats.forEach((f) => {
+      const meta = topicMap.get(m.topicId);
+      if (meta) {
+        meta.formats.forEach((f) => {
           const label = FORMAT_RULES[f]?.label ?? f;
           formatCount[label] = (formatCount[label] ?? 0) + 1;
         });
       }
     });
     return Object.entries(formatCount).map(([name, 使用次数]) => ({ name, 使用次数 }));
-  }, [allMatches, topics, archivedTournaments]);
+  }, [allMatches, topicMap]);
 
   const radarData = useMemo(() => {
     return CATEGORIES.map((c) => {
       const catMatches = allMatches.filter((m) => {
-        const t = getTopicByIdSafe(m.topicId, topics, archivedTournaments);
-        return t && t.category.includes(c);
+        const meta = topicMap.get(m.topicId);
+        return meta && meta.category.includes(c);
       });
       let pro = 0;
       let con = 0;
@@ -217,21 +223,22 @@ export default function TopicAnalyticsPage() {
         else if (m.winner === 'con') con++;
       });
       const total = catMatches.length || 1;
+      const heatRaw = (catMatches.length / Math.max(1, allMatches.length)) * 100;
       return {
         类别: c,
         正方胜率: Math.round((pro / total) * 100),
         反方胜率: Math.round((con / total) * 100),
-        使用热度: Math.min(100, Math.round((catMatches.length / Math.max(1, allMatches.length)) * 200)),
+        使用热度: clamp(Math.round(heatRaw), 0, 100),
       };
     });
-  }, [allMatches, topics, archivedTournaments]);
+  }, [allMatches, topicMap]);
 
   const difficultyWinTrend = useMemo(() => {
     const result = [];
     for (let d = 1; d <= 5; d++) {
       const diffMatches = allMatches.filter((m) => {
-        const t = getTopicByIdSafe(m.topicId, topics, archivedTournaments);
-        return t && t.difficulty === d;
+        const meta = topicMap.get(m.topicId);
+        return meta && meta.difficulty === d;
       });
       let pro = 0;
       let con = 0;
@@ -239,16 +246,16 @@ export default function TopicAnalyticsPage() {
         if (m.winner === 'pro') pro++;
         else if (m.winner === 'con') con++;
       });
-      const total = pro + con || 1;
+      const decided = pro + con || 1;
       result.push({
         name: `难度 ${d}`,
-        正方胜率: Math.round((pro / total) * 100),
-        反方胜率: Math.round((con / total) * 100),
+        正方胜率: Math.round((pro / decided) * 100),
+        反方胜率: Math.round((con / decided) * 100),
         比赛数: diffMatches.length,
       });
     }
     return result;
-  }, [allMatches, topics, archivedTournaments]);
+  }, [allMatches, topicMap]);
 
   const hotTopics = useMemo(() => {
     const countMap: Record<string, number> = {};
@@ -257,31 +264,28 @@ export default function TopicAnalyticsPage() {
     });
     return Object.entries(countMap)
       .map(([topicId, 使用次数]) => {
-        const topic = getTopicByIdSafe(topicId, topics, archivedTournaments);
+        const meta = topicMap.get(topicId);
         let pro = 0;
         let con = 0;
-        let draw = 0;
         allMatches
           .filter((m) => m.topicId === topicId)
           .forEach((m) => {
             if (m.winner === 'pro') pro++;
             else if (m.winner === 'con') con++;
-            else draw++;
           });
-        const total = pro + con + draw || 1;
+        const decided = pro + con || 1;
         return {
           topicId,
-          title: topic?.title ?? '未知辩题',
+          title: meta?.title ?? '未知辩题',
           使用次数,
-          正方胜率: Math.round((pro / total) * 100),
-          反方胜率: Math.round((con / total) * 100),
-          平局数: draw,
-          difficulty: topic?.difficulty ?? 3,
+          正方胜率: Math.round((pro / decided) * 100),
+          反方胜率: Math.round((con / decided) * 100),
+          difficulty: meta?.difficulty ?? 3,
         };
       })
       .sort((a, b) => b.使用次数 - a.使用次数)
       .slice(0, 8);
-  }, [allMatches, topics, archivedTournaments]);
+  }, [allMatches, topicMap]);
 
   const renderStars = (level: number) => (
     <div className="flex items-center gap-0.5">
@@ -602,7 +606,7 @@ export default function TopicAnalyticsPage() {
             </div>
             <h3 className="font-serif text-lg font-bold text-navy-900">热门辩题 TOP 排行</h3>
           </div>
-          <span className="text-xs text-navy-500">按使用次数排序 · TOP 8</span>
+          <span className="text-xs text-navy-500">按使用次数排序 · TOP 8 · 胜率仅计决胜场</span>
         </div>
         {hotTopics.length > 0 ? (
           <div className="overflow-x-auto">
