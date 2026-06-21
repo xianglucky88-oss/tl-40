@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   BarChart,
@@ -19,6 +19,11 @@ import {
   Radar,
   LineChart,
   Line,
+  ScatterChart,
+  Scatter,
+  ZAxis,
+  AreaChart,
+  Area,
 } from 'recharts';
 import {
   BarChart3,
@@ -31,12 +36,23 @@ import {
   Trophy,
   PieChart as PieChartIcon,
   Activity,
+  Sparkles,
+  Search,
+  Scale,
+  AlertTriangle,
+  Gauge,
+  Filter,
+  RefreshCw,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { useDebateStore } from '@/store/debateStore';
 import StatCard from '@/components/ui/StatCard';
-import type { TopicCategory, Winner, DebateFormat } from '@/types';
+import type { TopicCategory, Winner, DebateFormat, RecommendationContext, TopicRecommendation } from '@/types';
 import { FORMAT_RULES } from '@/engines/formatRules';
 import { cn } from '@/lib/utils';
+import { analyzeJudges, getTendencyLabel, getTendencyColor, getTendencyBgColor } from '@/engines/judgeAnalysisEngine';
+import { recommendTopics, getRoundDifficultyHint } from '@/engines/topicRecommendationEngine';
 
 const CATEGORIES: TopicCategory[] = ['政策', '价值', '事实', '模拟法庭'];
 const CATEGORY_COLORS: Record<TopicCategory, string> = {
@@ -147,6 +163,122 @@ export default function TopicAnalyticsPage() {
       totalFinished,
     };
   }, [topics, allMatches]);
+
+  const tournament = useDebateStore((s) => s.tournament);
+  const judges = useDebateStore((s) => s.judges);
+
+  const [recFilter, setRecFilter] = useState<{
+    round: number;
+    preferredCategories: TopicCategory[];
+    preferredDifficulty?: number;
+    showFilters: boolean;
+    expandedRecId: string | null;
+    expandedJudgeId: string | null;
+  }>({
+    round: tournament.currentRound,
+    preferredCategories: [],
+    showFilters: false,
+    expandedRecId: null,
+    expandedJudgeId: null,
+  });
+
+  const recContext: RecommendationContext = useMemo(() => ({
+    format: tournament.format,
+    tournamentType: tournament.type,
+    round: recFilter.round,
+    totalRounds: tournament.totalRounds,
+    preferredCategories: recFilter.preferredCategories.length > 0 ? recFilter.preferredCategories : undefined,
+    preferredDifficulty: recFilter.preferredDifficulty,
+  }), [tournament, recFilter]);
+
+  const recommendations = useMemo<TopicRecommendation[]>(() => {
+    return recommendTopics(topics, recContext, matches, archivedTournaments, 8);
+  }, [topics, recContext, matches, archivedTournaments]);
+
+  const judgeAnalysis = useMemo(() => {
+    return analyzeJudges(matches, archivedTournaments, judges);
+  }, [matches, archivedTournaments, judges]);
+
+  const difficultyDistribution = useMemo(() => {
+    const result = [];
+    for (let d = 1; d <= 5; d++) {
+      const topicCount = topics.filter((t) => t.difficulty === d).length;
+      const usedCount = allMatches.filter((m) => {
+        const meta = topicMap.get(m.topicId);
+        return meta && meta.difficulty === d;
+      }).length;
+      const catBreakdown: Record<string, number> = {};
+      CATEGORIES.forEach((c) => { catBreakdown[c] = 0; });
+      topics.filter((t) => t.difficulty === d).forEach((t) => {
+        t.category.forEach((c) => { catBreakdown[c]++; });
+      });
+      result.push({
+        name: `★${d}`,
+        difficulty: d,
+        辩题数: topicCount,
+        使用次数: usedCount,
+        占比: topics.length > 0 ? Math.round((topicCount / topics.length) * 100) : 0,
+        ...catBreakdown,
+      });
+    }
+    return result;
+  }, [topics, allMatches, topicMap]);
+
+  const difficultyScatterData = useMemo(() => {
+    return topics.map((t) => {
+      const usage = allMatches.filter((m) => m.topicId === t.id).length;
+      let proWins = 0;
+      let conWins = 0;
+      allMatches
+        .filter((m) => m.topicId === t.id)
+        .forEach((m) => {
+          if (m.winner === 'pro') proWins++;
+          else if (m.winner === 'con') conWins++;
+        });
+      const total = proWins + conWins || 1;
+      const winBias = Math.round((proWins / total) * 100) - 50;
+      return {
+        x: t.difficulty,
+        y: usage,
+        z: Math.abs(winBias) + 5,
+        name: t.title,
+        category: t.category[0],
+        difficulty: t.difficulty,
+        usage,
+        winBias,
+        fill: CATEGORY_COLORS[t.category[0]],
+      };
+    });
+  }, [topics, allMatches]);
+
+  const categoryDifficultyHeatmap = useMemo(() => {
+    const data: { category: string; difficulty: number; count: number; fill: string }[] = [];
+    CATEGORIES.forEach((cat) => {
+      for (let d = 1; d <= 5; d++) {
+        const count = topics.filter((t) => t.category.includes(cat) && t.difficulty === d).length;
+        const intensity = count > 0 ? Math.min(1, count / 3) : 0;
+        data.push({
+          category: cat,
+          difficulty: d,
+          count,
+          fill: count > 0 ? `rgba(50, 101, 164, ${0.2 + intensity * 0.7})` : 'rgba(219, 230, 244, 0.3)',
+        });
+      }
+    });
+    return data;
+  }, [topics]);
+
+  const tendencyDistribution = useMemo(() => {
+    const counts = { strict: 0, lenient: 0, normal: 0 };
+    judgeAnalysis.judgeStats.forEach((j) => {
+      counts[j.tendency]++;
+    });
+    return [
+      { name: '打分偏严', value: counts.strict, fill: '#ef4444' },
+      { name: '打分正常', value: counts.normal, fill: '#3265a4' },
+      { name: '打分偏松', value: counts.lenient, fill: '#10b981' },
+    ];
+  }, [judgeAnalysis]);
 
   const categoryUsageData = useMemo(() => {
     const counts: Record<TopicCategory, number> = {
@@ -438,16 +570,16 @@ export default function TopicAnalyticsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
         <div className="card p-6">
           <div className="flex items-center gap-2 mb-5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
               <Star className="h-4 w-4" />
             </div>
-            <h3 className="font-serif text-lg font-bold text-navy-900">难度分布分析</h3>
+            <h3 className="font-serif text-lg font-bold text-navy-900">难度分布统计</h3>
           </div>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={difficultyData}>
+            <BarChart data={difficultyDistribution}>
               <CartesianGrid strokeDasharray="3 3" stroke="#dbe6f4" vertical={false} />
               <XAxis dataKey="name" stroke="#5485bf" fontSize={12} tickLine={false} axisLine={false} />
               <YAxis stroke="#5485bf" fontSize={12} tickLine={false} axisLine={false} />
@@ -458,13 +590,136 @@ export default function TopicAnalyticsPage() {
                   borderRadius: '8px',
                   fontSize: 12,
                 }}
+                formatter={(value: number, name: string) => {
+                  if (name === '占比') return [`${value}%`, '占比'];
+                  return [value, name];
+                }}
               />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <Bar dataKey="辩题数" fill="#3265a4" radius={[6, 6, 0, 0]} />
               <Bar dataKey="使用次数" fill="#10b981" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="占比" fill="#c2874f" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
+
+        <div className="card p-6">
+          <div className="flex items-center gap-2 mb-5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-navy-50 text-navy-600">
+              <Gauge className="h-4 w-4" />
+            </div>
+            <h3 className="font-serif text-lg font-bold text-navy-900">难度 × 使用频率</h3>
+          </div>
+          <ResponsiveContainer width="100%" height={300}>
+            <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#dbe6f4" />
+              <XAxis
+                type="number"
+                dataKey="x"
+                name="难度"
+                stroke="#5485bf"
+                fontSize={12}
+                tickLine={false}
+                axisLine={false}
+                domain={[0.5, 5.5]}
+                ticks={[1, 2, 3, 4, 5]}
+                tickFormatter={(v) => `★${v}`}
+              />
+              <YAxis
+                type="number"
+                dataKey="y"
+                name="使用次数"
+                stroke="#5485bf"
+                fontSize={12}
+                tickLine={false}
+                axisLine={false}
+              />
+              <ZAxis
+                type="number"
+                dataKey="z"
+                range={[30, 300]}
+                name="胜率偏差"
+              />
+              <Tooltip
+                cursor={{ strokeDasharray: '3 3' }}
+                contentStyle={{
+                  backgroundColor: '#fff',
+                  border: '1px solid #dbe6f4',
+                  borderRadius: '8px',
+                  fontSize: 12,
+                }}
+                formatter={(value: any, name: string) => {
+                  if (name === '难度') return [`★${value}`, name];
+                  return [value, name];
+                }}
+              />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Scatter
+                name="辩题"
+                data={difficultyScatterData}
+                fill="#3265a4"
+              />
+            </ScatterChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="card p-6 xl:col-span-1">
+          <div className="flex items-center gap-2 mb-5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gold-50 text-gold-600">
+              <PieChartIcon className="h-4 w-4" />
+            </div>
+            <h3 className="font-serif text-lg font-bold text-navy-900">类别 × 难度 热力图</h3>
+          </div>
+          <div className="h-[300px] overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr>
+                  <th className="py-2 px-2 text-left text-xs font-semibold text-navy-500">类别</th>
+                  {[1, 2, 3, 4, 5].map((d) => (
+                    <th key={d} className="py-2 px-1 text-center text-xs font-semibold text-navy-500">★{d}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {CATEGORIES.map((cat) => (
+                  <tr key={cat}>
+                    <td className="py-2 px-2 text-navy-700 font-medium text-xs">{cat}</td>
+                    {[1, 2, 3, 4, 5].map((d) => {
+                      const cell = categoryDifficultyHeatmap.find((c) => c.category === cat && c.difficulty === d);
+                      return (
+                        <td key={d} className="py-2 px-1 text-center">
+                          <div
+                            className="w-8 h-8 mx-auto rounded-md flex items-center justify-center text-xs font-semibold transition-transform hover:scale-110"
+                            style={{ backgroundColor: cell?.fill }}
+                          >
+                            {cell && cell.count > 0 ? cell.count : ''}
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="flex items-center justify-center gap-3 mt-4 text-xs text-navy-500">
+              <div className="flex items-center gap-1">
+                <div className="w-4 h-4 rounded" style={{ backgroundColor: 'rgba(219, 230, 244, 0.3)' }} />
+                <span>0</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-4 h-4 rounded" style={{ backgroundColor: 'rgba(50, 101, 164, 0.4)' }} />
+                <span>1-2</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-4 h-4 rounded" style={{ backgroundColor: 'rgba(50, 101, 164, 0.9)' }} />
+                <span>≥3</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
         <div className="card p-6">
           <div className="flex items-center gap-2 mb-5">
@@ -709,6 +964,520 @@ export default function TopicAnalyticsPage() {
           </div>
         ) : (
           <div className="py-12 text-center text-navy-400">暂无比赛数据，完成比赛后将显示热门辩题排行</div>
+        )}
+      </div>
+
+      <div className="card p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-gold text-white">
+              <Sparkles className="h-4 w-4" />
+            </div>
+            <div>
+              <h3 className="font-serif text-lg font-bold text-navy-900">智能辩题推荐</h3>
+              <p className="text-xs text-navy-500">
+                {getRoundDifficultyHint(recFilter.round, tournament.totalRounds)}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setRecFilter((f) => ({ ...f, showFilters: !f.showFilters }))}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-navy-50 text-navy-600 hover:bg-navy-100 transition-colors"
+            >
+              <Filter className="h-3.5 w-3.5" />
+              <span>筛选条件</span>
+              {recFilter.showFilters ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </button>
+            <button
+              onClick={() => setRecFilter((f) => ({ ...f, round: tournament.currentRound, preferredCategories: [], preferredDifficulty: undefined }))}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-navy-50 text-navy-600 hover:bg-navy-100 transition-colors"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              <span>重置</span>
+            </button>
+          </div>
+        </div>
+
+        {recFilter.showFilters && (
+          <div className="mb-5 p-4 bg-navy-50/50 rounded-xl border border-navy-100">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-navy-600 mb-1.5">目标轮次</label>
+                <select
+                  value={recFilter.round}
+                  onChange={(e) => setRecFilter((f) => ({ ...f, round: Number(e.target.value) }))}
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-navy-200 bg-white text-navy-800 focus:outline-none focus:ring-2 focus:ring-navy-300"
+                >
+                  {Array.from({ length: tournament.totalRounds }, (_, i) => i + 1).map((r) => (
+                    <option key={r} value={r}>第 {r} 轮</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-navy-600 mb-1.5">偏好类别</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {CATEGORIES.map((cat) => {
+                    const selected = recFilter.preferredCategories.includes(cat);
+                    return (
+                      <button
+                        key={cat}
+                        onClick={() => {
+                          setRecFilter((f) => ({
+                            ...f,
+                            preferredCategories: selected
+                              ? f.preferredCategories.filter((c) => c !== cat)
+                              : [...f.preferredCategories, cat],
+                          }));
+                        }}
+                        className={cn(
+                          'px-2.5 py-1.5 text-xs rounded-md transition-colors',
+                          selected
+                            ? 'bg-navy-600 text-white'
+                            : 'bg-white text-navy-600 border border-navy-200 hover:bg-navy-50'
+                        )}
+                      >
+                        {cat}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-navy-600 mb-1.5">偏好难度</label>
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4, 5].map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => setRecFilter((f) => ({
+                        ...f,
+                        preferredDifficulty: f.preferredDifficulty === d ? undefined : d,
+                      }))}
+                      className={cn(
+                        'flex-1 py-1.5 text-xs rounded-md transition-colors',
+                        recFilter.preferredDifficulty === d
+                          ? 'bg-gold-500 text-white'
+                          : 'bg-white text-navy-600 border border-navy-200 hover:bg-navy-50'
+                      )}
+                    >
+                      ★{d}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {recommendations.length > 0 ? (
+          <div className="space-y-3">
+            {recommendations.map((rec, idx) => {
+              const isExpanded = recFilter.expandedRecId === rec.topicId;
+              const matchScoreColor =
+                rec.matchScore >= 80 ? 'text-emerald-600' : rec.matchScore >= 60 ? 'text-gold-600' : 'text-navy-600';
+              const matchScoreBg =
+                rec.matchScore >= 80 ? 'bg-emerald-50' : rec.matchScore >= 60 ? 'bg-gold-50' : 'bg-navy-50';
+              return (
+                <div
+                  key={rec.topicId}
+                  className="border border-navy-100 rounded-xl overflow-hidden hover:border-navy-300 transition-colors"
+                >
+                  <div
+                    className="flex items-center gap-4 p-4 cursor-pointer hover:bg-navy-50/50 transition-colors"
+                    onClick={() => setRecFilter((f) => ({
+                      ...f,
+                      expandedRecId: f.expandedRecId === rec.topicId ? null : rec.topicId,
+                    }))}
+                  >
+                    <span
+                      className={cn(
+                        'inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold flex-shrink-0',
+                        idx === 0
+                          ? 'bg-gradient-rank-1 text-white'
+                          : idx === 1
+                          ? 'bg-gradient-rank-2 text-white'
+                          : idx === 2
+                          ? 'bg-gradient-rank-3 text-white'
+                          : 'bg-navy-100 text-navy-600'
+                      )}
+                    >
+                      {idx + 1}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="font-medium text-navy-900 truncate">{rec.title}</p>
+                        <span className={cn('badge text-xs', matchScoreColor, matchScoreBg)}>
+                          匹配度 {rec.matchScore.toFixed(0)}%
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-navy-500">
+                        <div className="flex items-center gap-1">
+                          <span className="text-navy-400">类别:</span>
+                          {rec.category.map((c) => (
+                            <span key={c} className="px-1.5 py-0.5 rounded bg-navy-100 text-navy-600 text-[10px]">
+                              {c}
+                            </span>
+                          ))}
+                        </div>
+                        <span>难度 {renderStars(rec.difficulty)}</span>
+                        <span>使用 {rec.usageCount} 次</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4 flex-shrink-0">
+                      <div className="text-right hidden sm:block">
+                        <div className="text-xs text-navy-500 mb-0.5">历史胜率</div>
+                        <div className="flex items-center gap-2 text-xs">
+                          <span style={{ color: PRO_COLOR }} className="font-semibold">正方 {rec.proWinRate}%</span>
+                          <span className="text-navy-300">vs</span>
+                          <span style={{ color: CON_COLOR }} className="font-semibold">{rec.conWinRate}% 反方</span>
+                        </div>
+                      </div>
+                      {isExpanded ? <ChevronUp className="h-4 w-4 text-navy-400" /> : <ChevronDown className="h-4 w-4 text-navy-400" />}
+                    </div>
+                  </div>
+                  {isExpanded && (
+                    <div className="px-4 pb-4 pt-0 border-t border-navy-100 bg-navy-50/30">
+                      <div className="pt-4 space-y-3">
+                        <div>
+                          <div className="text-xs font-medium text-navy-600 mb-2">推荐理由</div>
+                          <div className="flex flex-wrap gap-2">
+                            {rec.reasons.map((reason, i) => (
+                              <span
+                                key={i}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-navy-200 text-xs text-navy-700"
+                              >
+                                <Sparkles className="h-3 w-3 text-gold-500" />
+                                {reason}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-medium text-navy-600 mb-2">适用赛制</div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {rec.formats.map((fmt) => (
+                              <span
+                                key={fmt}
+                                className="px-2.5 py-1 rounded bg-white border border-navy-200 text-[11px] text-navy-600"
+                              >
+                                {FORMAT_RULES[fmt]?.label ?? fmt}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="py-12 text-center text-navy-400">暂无符合条件的辩题推荐</div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 card p-6">
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-50 text-red-600">
+                <Scale className="h-4 w-4" />
+              </div>
+              <div>
+                <h3 className="font-serif text-lg font-bold text-navy-900">评委打分倾向分析</h3>
+                <p className="text-xs text-navy-500">
+                  分析 {judgeAnalysis.totalMatchesAnalyzed} 场比赛 · 平均分 {judgeAnalysis.overallAvgScore.toFixed(1)}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {judgeAnalysis.judgeStats.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-navy-100">
+                    <th className="py-3 px-3 text-left font-semibold text-navy-700">评委</th>
+                    <th className="py-3 px-3 text-center font-semibold text-navy-700">执裁场次</th>
+                    <th className="py-3 px-3 text-center font-semibold text-navy-700">平均分</th>
+                    <th className="py-3 px-3 text-center font-semibold text-navy-700">打分偏差</th>
+                    <th className="py-3 px-3 text-center font-semibold text-navy-700">倾向</th>
+                    <th className="py-3 px-3 text-center font-semibold text-navy-700">争议率</th>
+                    <th className="py-3 px-3 text-center font-semibold text-navy-700">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {judgeAnalysis.judgeStats.map((j) => {
+                    const isExpanded = recFilter.expandedJudgeId === j.judgeId;
+                    return (
+                      <>
+                        <tr
+                          key={j.judgeId}
+                          className="border-b border-navy-50 hover:bg-navy-50/30 transition-colors"
+                        >
+                          <td className="py-3 px-3">
+                            <div className="font-medium text-navy-800">{j.judgeName}</div>
+                          </td>
+                          <td className="py-3 px-3 text-center text-navy-700">{j.totalMatches}</td>
+                          <td className="py-3 px-3 text-center">
+                            <span className="font-semibold text-navy-800">{j.overallAvgScore.toFixed(1)}</span>
+                            <div className="text-[10px] text-navy-400 mt-0.5">
+                              正 {j.avgProScore.toFixed(0)} · 反 {j.avgConScore.toFixed(0)}
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <span className={cn(
+                              'font-semibold',
+                              j.tendencyScore < -3 ? 'text-red-600' : j.tendencyScore > 3 ? 'text-emerald-600' : 'text-navy-700'
+                            )}>
+                              {j.tendencyScore > 0 ? '+' : ''}{j.tendencyScore.toFixed(1)}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <span className={cn(
+                              'badge ring-1 text-xs',
+                              getTendencyColor(j.tendency),
+                              getTendencyBgColor(j.tendency)
+                            )}>
+                              {getTendencyLabel(j.tendency)}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="font-semibold text-navy-800">{j.splitDecisionRate}%</span>
+                              <div className="w-16 h-1.5 rounded-full bg-navy-100 overflow-hidden">
+                                <div
+                                  className="h-full rounded-full bg-red-400"
+                                  style={{ width: `${Math.min(j.splitDecisionRate, 100)}%` }}
+                                />
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <button
+                              onClick={() => setRecFilter((f) => ({
+                                ...f,
+                                expandedJudgeId: f.expandedJudgeId === j.judgeId ? null : j.judgeId,
+                              }))}
+                              className="p-1.5 rounded-lg hover:bg-navy-100 text-navy-400 hover:text-navy-600 transition-colors"
+                            >
+                              {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </button>
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr className="bg-navy-50/50">
+                            <td colSpan={7} className="py-4 px-6">
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div className="bg-white rounded-lg p-3 border border-navy-100">
+                                  <div className="text-xs text-navy-500 mb-1">打分标准差</div>
+                                  <div className="text-xl font-bold text-navy-800">{j.scoreStdDev.toFixed(2)}</div>
+                                  <div className="text-[10px] text-navy-400 mt-0.5">
+                                    {j.scoreStdDev < 3 ? '打分稳定' : j.scoreStdDev < 6 ? '打分波动适中' : '打分波动较大'}
+                                  </div>
+                                </div>
+                                <div className="bg-white rounded-lg p-3 border border-navy-100">
+                                  <div className="text-xs text-navy-500 mb-1">正方平均分</div>
+                                  <div className="text-xl font-bold" style={{ color: PRO_COLOR }}>{j.avgProScore.toFixed(1)}</div>
+                                  <div className="w-full h-1.5 rounded-full bg-navy-100 mt-2 overflow-hidden">
+                                    <div
+                                      className="h-full rounded-full"
+                                      style={{ width: `${(j.avgProScore / 100) * 100}%`, backgroundColor: PRO_COLOR }}
+                                    />
+                                  </div>
+                                </div>
+                                <div className="bg-white rounded-lg p-3 border border-navy-100">
+                                  <div className="text-xs text-navy-500 mb-1">反方平均分</div>
+                                  <div className="text-xl font-bold" style={{ color: CON_COLOR }}>{j.avgConScore.toFixed(1)}</div>
+                                  <div className="w-full h-1.5 rounded-full bg-navy-100 mt-2 overflow-hidden">
+                                    <div
+                                      className="h-full rounded-full"
+                                      style={{ width: `${(j.avgConScore / 100) * 100}%`, backgroundColor: CON_COLOR }}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="py-12 text-center text-navy-400">暂无足够的比赛数据进行评委分析</div>
+          )}
+        </div>
+
+        <div className="card p-6">
+          <div className="flex items-center gap-2 mb-5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gold-50 text-gold-600">
+              <PieChartIcon className="h-4 w-4" />
+            </div>
+            <h3 className="font-serif text-lg font-bold text-navy-900">评委倾向分布</h3>
+          </div>
+          <div className="flex items-center justify-center">
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie
+                  data={tendencyDistribution.filter((d) => d.value > 0)}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={50}
+                  outerRadius={90}
+                  paddingAngle={3}
+                  dataKey="value"
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  labelLine={{ stroke: '#b8cfe8' }}
+                >
+                  {tendencyDistribution.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#fff',
+                    border: '1px solid #dbe6f4',
+                    borderRadius: '8px',
+                    fontSize: 12,
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="grid grid-cols-3 gap-2 mt-4">
+            {tendencyDistribution.map((item) => (
+              <div key={item.name} className="text-center">
+                <div className="flex items-center justify-center gap-1 mb-1">
+                  <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.fill }} />
+                  <span className="text-xs text-navy-600">{item.name}</span>
+                </div>
+                <div className="text-lg font-bold text-navy-800">{item.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="card p-6">
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-50 text-red-600">
+              <AlertTriangle className="h-4 w-4" />
+            </div>
+            <div>
+              <h3 className="font-serif text-lg font-bold text-navy-900">争议判决识别</h3>
+              <p className="text-xs text-navy-500">
+                识别评委意见分歧较大、存在打分异常的比赛
+              </p>
+            </div>
+          </div>
+          <span className="text-xs text-navy-500">
+            共 {judgeAnalysis.controversialMatches.length} 场争议比赛
+          </span>
+        </div>
+
+        {judgeAnalysis.controversialMatches.length > 0 ? (
+          <div className="space-y-4">
+            {judgeAnalysis.controversialMatches.slice(0, 6).map((match) => (
+              <div
+                key={match.matchId}
+                className="border border-red-100 rounded-xl p-4 bg-red-50/30"
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="px-2 py-0.5 rounded bg-red-100 text-red-600 text-[10px] font-semibold">
+                        争议判决
+                      </span>
+                      <span className="text-xs text-navy-500">
+                        {match.tournamentName} · 第{match.round}轮
+                      </span>
+                    </div>
+                    <p className="font-medium text-navy-900 truncate">{match.topicTitle}</p>
+                  </div>
+                  <div className="text-right ml-4 flex-shrink-0">
+                    <div className="text-xs text-navy-500">最大分差</div>
+                    <div className="text-lg font-bold text-red-600">{match.maxScoreDiff}</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
+                  <div className="bg-white rounded-lg p-2.5 border border-navy-100">
+                    <div className="text-[10px] text-navy-500">分数标准差</div>
+                    <div className="text-base font-bold text-navy-800">{match.scoreVariance}</div>
+                  </div>
+                  <div className="bg-white rounded-lg p-2.5 border border-navy-100">
+                    <div className="text-[10px] text-navy-500">票数分布</div>
+                    <div className="text-base font-bold text-navy-800">
+                      <span style={{ color: PRO_COLOR }}>{match.splitVotes.pro}</span>
+                      <span className="text-navy-300 mx-1">:</span>
+                      <span style={{ color: CON_COLOR }}>{match.splitVotes.con}</span>
+                      {match.splitVotes.draw > 0 && (
+                        <span className="text-navy-400 ml-1">({match.splitVotes.draw}平)</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-lg p-2.5 border border-navy-100 sm:col-span-1 col-span-2">
+                    <div className="text-[10px] text-navy-500">判决类型</div>
+                    <div className="text-base font-bold text-navy-800">
+                      {match.hasSplitDecision ? (
+                        <span className="text-red-600">分裂判决 ⚠️</span>
+                      ) : (
+                        <span className="text-gold-600">打分差异大</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg p-3 border border-navy-100">
+                  <div className="text-[10px] text-navy-500 mb-2">评委打分详情</div>
+                  <div className="space-y-2">
+                    {match.judgeScores.map((js, idx) => (
+                      <div key={js.judgeId} className="flex items-center gap-3 text-xs">
+                        <span className="w-20 truncate text-navy-700">{js.judgeName}</span>
+                        <div className="flex-1 flex items-center gap-2">
+                          <span className="w-8 text-right font-medium" style={{ color: PRO_COLOR }}>{js.proScore}</span>
+                          <div className="flex-1 h-2 bg-navy-100 rounded-full overflow-hidden flex">
+                            <div
+                              className="h-full"
+                              style={{
+                                width: `${(js.proScore / (js.proScore + js.conScore)) * 100}%`,
+                                backgroundColor: PRO_COLOR,
+                              }}
+                            />
+                            <div
+                              className="h-full"
+                              style={{
+                                width: `${(js.conScore / (js.proScore + js.conScore)) * 100}%`,
+                                backgroundColor: CON_COLOR,
+                              }}
+                            />
+                          </div>
+                          <span className="w-8 font-medium" style={{ color: CON_COLOR }}>{js.conScore}</span>
+                        </div>
+                        <span className={cn(
+                          'w-12 text-center px-1.5 py-0.5 rounded text-[10px] font-medium',
+                          js.vote === 'pro' ? 'bg-navy-100 text-navy-600' : js.vote === 'con' ? 'bg-gold-100 text-gold-700' : 'bg-navy-50 text-navy-500'
+                        )}>
+                          {js.vote === 'pro' ? '投正方' : js.vote === 'con' ? '投反方' : '平局'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="py-12 text-center text-navy-400">
+            <Scale className="h-12 w-12 mx-auto mb-3 text-navy-200" />
+            <p>暂无争议判决记录</p>
+            <p className="text-xs mt-1">评委打分一致性良好</p>
+          </div>
         )}
       </div>
     </div>

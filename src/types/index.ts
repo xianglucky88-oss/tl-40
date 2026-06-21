@@ -426,3 +426,71 @@ export interface ArgumentTree {
   proRoots: ArgumentNode[];
   conRoots: ArgumentNode[];
 }
+
+export type JudgeTendency = 'strict' | 'lenient' | 'normal';
+
+export interface JudgeScoringStat {
+  judgeId: string;
+  judgeName: string;
+  totalMatches: number;
+  avgProScore: number;
+  avgConScore: number;
+  overallAvgScore: number;
+  scoreStdDev: number;
+  tendency: JudgeTendency;
+  tendencyScore: number;
+  controversialCount: number;
+  splitDecisionRate: number;
+}
+
+export interface MatchJudgeScoreDiff {
+  matchId: string;
+  topicTitle: string;
+  tournamentName: string;
+  round: number;
+  judgeScores: {
+    judgeId: string;
+    judgeName: string;
+    proScore: number;
+    conScore: number;
+    vote: Winner;
+  }[];
+  scoreVariance: number;
+  maxScoreDiff: number;
+  isControversial: boolean;
+  splitVotes: { pro: number; con: number; draw: number };
+  hasSplitDecision: boolean;
+}
+
+export interface JudgeAnalysisResult {
+  judgeStats: JudgeScoringStat[];
+  controversialMatches: MatchJudgeScoreDiff[];
+  overallAvgScore: number;
+  totalMatchesAnalyzed: number;
+}
+
+export interface TopicRecommendation {
+  topicId: string;
+  title: string;
+  category: TopicCategory[];
+  difficulty: number;
+  formats: DebateFormat[];
+  matchScore: number;
+  reasons: string[];
+  usageCount: number;
+  proWinRate: number;
+  conWinRate: number;
+}
+
+export interface RecommendationContext {
+  format: DebateFormat;
+  tournamentType: TournamentType;
+  round: number;
+  totalRounds: number;
+  teamStrengths?: { teamId: string; strength: number }[];
+  preferredCategories?: TopicCategory[];
+  preferredDifficulty?: number;
+  excludeTopicIds?: string[];
+  maxDifficulty?: number;
+  minDifficulty?: number;
+}
