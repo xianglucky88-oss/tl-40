@@ -17,6 +17,7 @@ import ArchivedTournamentDetailPage from "@/pages/ArchivedTournamentDetailPage";
 import MatchArchiveDetailPage from "@/pages/MatchArchiveDetailPage";
 import PlayersPage from "@/pages/PlayersPage";
 import PlayerProfilePage from "@/pages/PlayerProfilePage";
+import AIDebatePage from "@/pages/AIDebatePage";
 
 export default function App() {
   return (
@@ -29,6 +30,7 @@ export default function App() {
             <Layout>
               <Routes>
                 <Route path="/" element={<DashboardPage />} />
+                <Route path="/ai-debate" element={<AIDebatePage />} />
                 <Route path="/teams" element={<TeamsPage />} />
                 <Route path="/judges" element={<JudgesPage />} />
                 <Route path="/topics/analytics" element={<TopicAnalyticsPage />} />

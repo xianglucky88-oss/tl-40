@@ -14,6 +14,7 @@ import {
   Archive,
   User,
   PieChart as PieChartIcon,
+  Brain,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -25,6 +26,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { path: '/', name: '赛事概览', icon: LayoutDashboard },
+  { path: '/ai-debate', name: 'AI 辩论', icon: Brain },
   { path: '/teams', name: '参赛队伍', icon: Users },
   { path: '/judges', name: '评委管理', icon: Gavel },
   { path: '/topics', name: '辩题库', icon: FileText },

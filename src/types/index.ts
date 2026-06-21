@@ -376,3 +376,32 @@ export interface ArchiveFilter {
 }
 
 export type ArchiveViewMode = 'timeline' | 'grid' | 'list';
+
+export type AIDebateMode = 'practice' | 'challenge' | 'casual';
+export type AIDifficulty = 'easy' | 'medium' | 'hard' | 'expert';
+export type AISide = 'pro' | 'con';
+export type ChatMessageRole = 'user' | 'ai' | 'system';
+
+export interface AIDebateSettings {
+  topic: string;
+  mode: AIDebateMode;
+  userSide: AISide;
+  difficulty: AIDifficulty;
+  thinkTimeSeconds: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: ChatMessageRole;
+  content: string;
+  timestamp: number;
+  side?: AISide;
+}
+
+export interface AIDebateState {
+  settings: AIDebateSettings | null;
+  messages: ChatMessage[];
+  isStarted: boolean;
+  isAIGenerating: boolean;
+  roundNumber: number;
+}
