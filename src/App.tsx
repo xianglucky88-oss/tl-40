@@ -21,6 +21,7 @@ import PlayerProfilePage from "@/pages/PlayerProfilePage";
 import PlayerComparePage from "@/pages/PlayerComparePage";
 import AIDebatePage from "@/pages/AIDebatePage";
 import RulesHandbookPage from "@/pages/RulesHandbookPage";
+import TopicDrawPage from "@/pages/TopicDrawPage";
 
 export default function App() {
   return (
@@ -38,6 +39,7 @@ export default function App() {
                 <Route path="/teams" element={<TeamsPage />} />
                 <Route path="/judges" element={<JudgesPage />} />
                 <Route path="/topics/analytics" element={<TopicAnalyticsPage />} />
+                <Route path="/topics/draw" element={<TopicDrawPage />} />
                 <Route path="/topics/:topicId" element={<TopicDetailPage />} />
                 <Route path="/topics" element={<TopicsPage />} />
                 <Route path="/tournament" element={<TournamentPage />} />

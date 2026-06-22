@@ -16,6 +16,7 @@ import {
   PieChart as PieChartIcon,
   Brain,
   BookOpen,
+  Shuffle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -32,6 +33,7 @@ const navItems: NavItem[] = [
   { path: '/teams', name: '参赛队伍', icon: Users },
   { path: '/judges', name: '评委管理', icon: Gavel },
   { path: '/topics', name: '辩题库', icon: FileText },
+  { path: '/topics/draw', name: '辩题抽签', icon: Shuffle },
   { path: '/topics/analytics', name: '辩题分析', icon: PieChartIcon },
   { path: '/tournament', name: '赛制编排', icon: Trophy },
   { path: '/live', name: '比赛现场', icon: Timer },
