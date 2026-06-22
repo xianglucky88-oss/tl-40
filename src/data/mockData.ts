@@ -283,6 +283,7 @@ const ARCHIVE_TOURNAMENT_DATA = [
     totalMatches: 15,
     judgesPerMatch: 3,
     description: '首届全国高校华语辩论邀请赛，汇集全国顶尖高校辩论队伍，共16支队伍参赛',
+    coverUrl: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=debate%20tournament%20stage%20with%20golden%20trophy%20and%20microphone%2C%20elegant%20navy%20blue%20background%20with%20spotlights%2C%20professional%20photography&image_size=landscape_4_3',
   },
   {
     name: '2024·秋季辩论联赛',
@@ -294,6 +295,7 @@ const ARCHIVE_TOURNAMENT_DATA = [
     totalMatches: 28,
     judgesPerMatch: 3,
     description: '秋季辩论联赛，采用议会制赛制，8支队伍循环对决',
+    coverUrl: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=autumn%20debate%20hall%20with%20warm%20lighting%2C%20wooden%20podium%20and%20parliamentary%20chamber%2C%20elegant%20atmosphere&image_size=landscape_4_3',
   },
   {
     name: '2025·春季冠军赛',
@@ -305,6 +307,7 @@ const ARCHIVE_TOURNAMENT_DATA = [
     totalMatches: 20,
     judgesPerMatch: 3,
     description: '2025春季冠军赛，瑞士轮赛制，12支精英队伍角逐冠军',
+    coverUrl: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=spring%20championship%20debate%20arena%2C%20cherry%20blossom%20accents%2C%20golden%20medal%20and%20trophy%2C%20modern%20stage&image_size=landscape_4_3',
   },
   {
     name: '2025·模拟法庭邀请赛',
@@ -316,6 +319,7 @@ const ARCHIVE_TOURNAMENT_DATA = [
     totalMatches: 7,
     judgesPerMatch: 5,
     description: '首届模拟法庭邀请赛，法学院校专业对决',
+    coverUrl: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=moot%20court%20courtroom%20interior%2C%20judge%20bench%20and%20legal%20books%2C%20dark%20wood%20paneling%2C%20dramatic%20lighting&image_size=landscape_4_3',
   },
   {
     name: '2025·秋季BP辩论赛',
@@ -327,6 +331,7 @@ const ARCHIVE_TOURNAMENT_DATA = [
     totalMatches: 16,
     judgesPerMatch: 3,
     description: '英国议会制辩论赛，国际标准赛制，16支队伍四队对决',
+    coverUrl: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=british%20parliamentary%20debate%20chamber%2C%20gothic%20architecture%2C%20four%20podiums%2C%20rich%20navy%20and%20gold%20decor&image_size=landscape_4_3',
   },
 ];
 
@@ -734,6 +739,7 @@ export const buildArchivedTournaments = (): ArchivedTournament[] => {
       startDate: matches[0]?.startedAt ?? Date.now(),
       endDate: matches[matches.length - 1]?.finishedAt ?? Date.now(),
       description: t.description,
+      coverUrl: t.coverUrl,
       championTeamId: sortedTeams[0]?.id,
       championTeamName: sortedTeams[0]?.name,
       runnerUpTeamId: sortedTeams[1]?.id,

@@ -93,6 +93,7 @@ export interface TournamentConfig {
   createdAt: number;
   currentRound: number;
   description?: string;
+  coverUrl?: string;
 }
 
 export interface PlayerScore {
@@ -363,6 +364,7 @@ export interface ArchivedTournament {
   runnerUpTeamName?: string;
   mvpPlayerId?: string;
   mvpPlayerName?: string;
+  coverUrl?: string;
   teams: ArchivedTeam[];
   matches: ArchivedMatch[];
 }

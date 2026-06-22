@@ -1,9 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDebateStore } from '@/store/debateStore';
 import { MatchCard } from '@/components/cards/MatchCard';
 import Empty from '@/components/ui/Empty';
-import { AlertTriangle, Swords, ListTree, Sparkles, RefreshCw, Archive, CheckCircle } from 'lucide-react';
+import { AlertTriangle, Swords, ListTree, Sparkles, RefreshCw, Archive, CheckCircle, ImagePlus, X } from 'lucide-react';
 import type { DebateFormat, TournamentType, MatchPairing, Team } from '@/types';
 
 const formatOptions: { value: DebateFormat; label: string }[] = [
@@ -108,6 +108,7 @@ export default function TournamentPage() {
   const [activeRound, setActiveRound] = useState<number>(tournament.currentRound);
   const [viewMode, setViewMode] = useState<'tree' | 'list'>('list');
   const [archiveResult, setArchiveResult] = useState<{ success: boolean; message: string } | null>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
 
   const totalRounds = tournament.totalRounds;
   const roundList = useMemo(
@@ -139,6 +140,17 @@ export default function TournamentPage() {
 
   const isSingleElim = tournament.type === 'single_elimination';
 
+  const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      updateTournament({ coverUrl: dataUrl });
+    };
+    reader.readAsDataURL(file);
+  };
+
   return (
     <div className="space-y-6">
       <div className="card p-5">
@@ -169,67 +181,111 @@ export default function TournamentPage() {
         </div>
 
         <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="col-span-2 grid grid-cols-2 gap-4">
+            <div>
+              <label className="label-base">赛事名称</label>
+              <input
+                type="text"
+                value={tournament.name}
+                onChange={(e) => updateTournament({ name: e.target.value })}
+                placeholder="请输入赛事名称"
+                className="input-base"
+              />
+            </div>
+            <div>
+              <label className="label-base">辩论类型</label>
+              <select
+                value={tournament.format}
+                onChange={(e) => updateTournament({ format: e.target.value as DebateFormat })}
+                className="input-base"
+              >
+                {formatOptions.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label-base">赛制类型</label>
+              <select
+                value={tournament.type}
+                onChange={(e) => updateTournament({ type: e.target.value as TournamentType })}
+                className="input-base"
+              >
+                {typeOptions.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label-base">总轮次</label>
+              <input
+                type="number"
+                min={1}
+                max={20}
+                value={tournament.totalRounds}
+                onChange={(e) => updateTournament({ totalRounds: Math.max(1, parseInt(e.target.value) || 1) })}
+                className="input-base"
+              />
+            </div>
+            <div>
+              <label className="label-base">每场评委数</label>
+              <input
+                type="number"
+                min={1}
+                max={9}
+                value={tournament.judgesPerMatch}
+                onChange={(e) => updateTournament({ judgesPerMatch: Math.max(1, parseInt(e.target.value) || 1) })}
+                className="input-base"
+              />
+            </div>
+            <div className="flex items-end gap-2">
+              <button onClick={regenerateAllMatches} className="btn-gold flex-1">
+                <Sparkles className="w-4 h-4" />
+                应用配置并生成对阵
+              </button>
+            </div>
+          </div>
           <div>
-            <label className="label-base">赛事名称</label>
+            <label className="label-base">赛事封面</label>
             <input
-              type="text"
-              value={tournament.name}
-              onChange={(e) => updateTournament({ name: e.target.value })}
-              placeholder="请输入赛事名称"
-              className="input-base"
+              ref={coverInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleCoverUpload}
+              className="hidden"
             />
-          </div>
-          <div>
-            <label className="label-base">辩论类型</label>
-            <select
-              value={tournament.format}
-              onChange={(e) => updateTournament({ format: e.target.value as DebateFormat })}
-              className="input-base"
-            >
-              {formatOptions.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="label-base">赛制类型</label>
-            <select
-              value={tournament.type}
-              onChange={(e) => updateTournament({ type: e.target.value as TournamentType })}
-              className="input-base"
-            >
-              {typeOptions.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="label-base">总轮次</label>
-            <input
-              type="number"
-              min={1}
-              max={20}
-              value={tournament.totalRounds}
-              onChange={(e) => updateTournament({ totalRounds: Math.max(1, parseInt(e.target.value) || 1) })}
-              className="input-base"
-            />
-          </div>
-          <div>
-            <label className="label-base">每场评委数</label>
-            <input
-              type="number"
-              min={1}
-              max={9}
-              value={tournament.judgesPerMatch}
-              onChange={(e) => updateTournament({ judgesPerMatch: Math.max(1, parseInt(e.target.value) || 1) })}
-              className="input-base"
-            />
-          </div>
-          <div className="flex items-end gap-2">
-            <button onClick={regenerateAllMatches} className="btn-gold flex-1">
-              <Sparkles className="w-4 h-4" />
-              应用配置并生成对阵
-            </button>
+            {tournament.coverUrl ? (
+              <div className="relative w-full aspect-[4/3] rounded-xl overflow-hidden border border-navy-200 group">
+                <img
+                  src={tournament.coverUrl}
+                  alt="赛事封面"
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-navy-900/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                  <button
+                    onClick={() => coverInputRef.current?.click()}
+                    className="px-3 py-1.5 rounded-lg bg-white/90 text-navy-800 text-xs font-medium hover:bg-white transition-colors"
+                  >
+                    更换封面
+                  </button>
+                  <button
+                    onClick={() => updateTournament({ coverUrl: undefined })}
+                    className="px-3 py-1.5 rounded-lg bg-red-500/90 text-white text-xs font-medium hover:bg-red-500 transition-colors"
+                  >
+                    移除
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => coverInputRef.current?.click()}
+                className="w-full aspect-[4/3] rounded-xl border-2 border-dashed border-navy-200 bg-navy-50/50 flex flex-col items-center justify-center gap-2 text-navy-400 hover:border-gold-400 hover:text-gold-500 hover:bg-gold-50/30 transition-all duration-200"
+              >
+                <ImagePlus className="w-8 h-8" />
+                <span className="text-xs font-medium">上传赛事封面</span>
+                <span className="text-[10px]">建议尺寸 800×600</span>
+              </button>
+            )}
           </div>
         </div>
 

@@ -813,6 +813,7 @@ export const useDebateStore = create<DebateState>()(
           startDate: archivedMatches[0]?.startedAt ?? now,
           endDate: archivedMatches[archivedMatches.length - 1]?.finishedAt ?? now,
           description: tournament.description,
+          coverUrl: tournament.coverUrl,
           championTeamId: sortedTeams[0]?.id,
           championTeamName: sortedTeams[0]?.name,
           runnerUpTeamId: sortedTeams[1]?.id,
