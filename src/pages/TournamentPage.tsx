@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDebateStore } from '@/store/debateStore';
 import { MatchCard } from '@/components/cards/MatchCard';
@@ -46,48 +46,287 @@ const BracketView = ({ matches, getTeamById }: {
   matches: MatchPairing[];
   getTeamById: (id: string) => Team | undefined;
 }) => {
+  const [hoveredMatchId, setHoveredMatchId] = useState<string | null>(null);
+
   const rounds = useMemo(() => {
     const maxR = Math.max(...matches.map((m) => m.round), 1);
     return Array.from({ length: maxR }, (_, i) => i + 1);
   }, [matches]);
 
-  return (
-    <div className="overflow-x-auto pb-6">
-      <div className="flex gap-8 min-w-max p-4">
-        {rounds.map((round) => {
-          const roundMatches = matches.filter((m) => m.round === round);
-          return (
-            <div key={round} className="flex flex-col justify-around gap-6" style={{ minWidth: 260 }}>
-              <div className="text-center mb-2">
-                <span className="badge-gold">R{round}</span>
-              </div>
-              <div className="flex flex-col justify-around gap-6 flex-1">
-                {roundMatches.map((m) => {
-                  const pro = getTeamById(m.proTeamId);
-                  const con = getTeamById(m.conTeamId);
-                  const won = m.winner;
-                  return (
-                    <div key={m.id} className="relative card p-3 text-sm">
-                      <div className={`rounded-md px-2.5 py-1.5 mb-1 ${won === 'pro' ? 'bg-emerald-50 border border-emerald-200' : won === 'con' ? 'opacity-50' : 'bg-emerald-50/50 border border-emerald-100'}`}>
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium text-navy-800 truncate">{pro?.name ?? '待定'}</span>
-                          {won === 'pro' && <span className="text-emerald-600 text-xs font-bold">✓</span>}
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-center text-gold-500 text-[10px] font-semibold py-0.5">VS</div>
-                      <div className={`rounded-md px-2.5 py-1.5 ${won === 'con' ? 'bg-red-50 border border-red-200' : won === 'pro' ? 'opacity-50' : 'bg-red-50/50 border border-red-100'}`}>
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium text-navy-800 truncate">{con?.name ?? '待定'}</span>
-                          {won === 'con' && <span className="text-red-600 text-xs font-bold">✓</span>}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+  const matchesByRound = useMemo(() => {
+    const map: Record<number, MatchPairing[]> = {};
+    rounds.forEach((r) => {
+      map[r] = matches.filter((m) => m.round === r);
+    });
+    return map;
+  }, [matches, rounds]);
+
+  const championPath = useMemo(() => {
+    const pathSet = new Set<string>();
+    const teamPathSet = new Set<string>();
+    if (rounds.length === 0) return { matchIds: pathSet, teamIds: teamPathSet };
+
+    const finalRound = rounds[rounds.length - 1];
+    const finalMatch = matchesByRound[finalRound]?.[0];
+    if (!finalMatch?.winner) return { matchIds: pathSet, teamIds: teamPathSet };
+
+    let currentMatch = finalMatch;
+    let currentSide = finalMatch.winner;
+
+    while (currentMatch) {
+      pathSet.add(currentMatch.id);
+      const winnerTeamId = currentSide === 'pro' ? currentMatch.proTeamId : currentMatch.conTeamId;
+      teamPathSet.add(winnerTeamId);
+
+      const prevRound = currentMatch.round - 1;
+      if (prevRound < 1) break;
+
+      const prevMatches = matchesByRound[prevRound];
+      if (!prevMatches) break;
+
+      let foundMatch: MatchPairing | null = null;
+      let foundSide: 'pro' | 'con' | null = null;
+
+      for (const pm of prevMatches) {
+        if (pm.winner === 'pro' && pm.proTeamId === winnerTeamId) {
+          foundMatch = pm;
+          foundSide = 'pro';
+          break;
+        }
+        if (pm.winner === 'con' && pm.conTeamId === winnerTeamId) {
+          foundMatch = pm;
+          foundSide = 'con';
+          break;
+        }
+      }
+
+      if (!foundMatch) break;
+      currentMatch = foundMatch;
+      currentSide = foundSide;
+    }
+
+    return { matchIds: pathSet, teamIds: teamPathSet };
+  }, [rounds, matchesByRound]);
+
+  const getMatchPosition = useCallback((match: MatchPairing, roundMatches: MatchPairing[]) => {
+    const matchHeight = 96;
+    const gap = 24;
+    const index = roundMatches.indexOf(match);
+    const paddingTop = roundMatches.length === 1 ? 0 : (gap + matchHeight) * (Math.pow(2, rounds.length - match.round - 1) - 0.5);
+    return {
+      top: paddingTop + index * (matchHeight + gap) * Math.pow(2, rounds.length - match.round),
+      height: matchHeight,
+    };
+  }, [rounds.length]);
+
+  const renderConnectors = () => {
+    const elements: JSX.Element[] = [];
+    const cardWidth = 260;
+    const gap = 32;
+
+    for (let r = 1; r < rounds.length; r++) {
+      const currentRound = matchesByRound[r];
+      const nextRound = matchesByRound[r + 1];
+      if (!currentRound || !nextRound) continue;
+
+      for (let i = 0; i < currentRound.length; i += 2) {
+        const matchA = currentRound[i];
+        const matchB = currentRound[i + 1];
+        const nextMatchIdx = Math.floor(i / 2);
+        const nextMatch = nextRound[nextMatchIdx];
+        if (!matchA || !nextMatch) continue;
+
+        const posA = getMatchPosition(matchA, currentRound);
+        const posB = matchB ? getMatchPosition(matchB, currentRound) : null;
+        const posNext = getMatchPosition(nextMatch, nextRound);
+
+        const startX = cardWidth;
+        const endX = cardWidth + gap;
+
+        const aY = posA.top + posA.height / 2;
+        const bY = posB ? posB.top + posB.height / 2 : aY;
+        const nextY = posNext.top + posNext.height / 2;
+
+        const midX = startX + gap / 2;
+        const isActivePath = championPath.matchIds.has(matchA.id) &&
+                           (!matchB || championPath.matchIds.has(matchB.id)) &&
+                           championPath.matchIds.has(nextMatch.id);
+
+        const connectorClass = isActivePath ? 'bracket-connector-path' : 'bracket-connector';
+        const strokeColor = isActivePath ? '#D4A574' : '#b8cfe8';
+        const animationDelay = `${(r - 1) * 0.2 + i * 0.05}s`;
+
+        if (matchB) {
+          elements.push(
+            <g key={`conn-${r}-${i}`}>
+              <path
+                d={`M ${startX} ${aY} L ${midX} ${aY} L ${midX} ${nextY} L ${endX} ${nextY}`}
+                fill="none"
+                stroke={strokeColor}
+                strokeWidth={isActivePath ? 3 : 2}
+                className={connectorClass}
+                style={{ animationDelay }}
+              />
+              <path
+                d={`M ${startX} ${bY} L ${midX} ${bY} L ${midX} ${nextY} L ${endX} ${nextY}`}
+                fill="none"
+                stroke={strokeColor}
+                strokeWidth={isActivePath ? 3 : 2}
+                className={connectorClass}
+                style={{ animationDelay: `${parseFloat(animationDelay) + 0.05}s` }}
+              />
+              {isActivePath && (
+                <circle r="4" fill="#D4A574" cx={endX} cy={nextY}>
+                  <animate attributeName="opacity" values="0;1;0" dur="2s" repeatCount="indefinite" begin={animationDelay} />
+                </circle>
+              )}
+            </g>
           );
-        })}
+        } else {
+          elements.push(
+            <path
+              key={`conn-${r}-${i}`}
+              d={`M ${startX} ${aY} L ${endX} ${nextY}`}
+              fill="none"
+              stroke={strokeColor}
+              strokeWidth={isActivePath ? 3 : 2}
+              className={connectorClass}
+              style={{ animationDelay }}
+            />
+          );
+        }
+      }
+    }
+    return elements;
+  };
+
+  const getRoundLabel = (round: number, totalRounds: number) => {
+    if (round === totalRounds && totalRounds > 1) return '🏆 决赛';
+    if (round === totalRounds - 1 && totalRounds > 2) return '半决赛';
+    if (round === totalRounds - 2 && totalRounds > 3) return '四分之一决赛';
+    if (round === 1) return '第一轮';
+    return `R${round}`;
+  };
+
+  return (
+    <div className="overflow-x-auto pb-6 scroll-thin">
+      <div className="relative min-w-max p-6 pr-12" style={{ minHeight: Math.max(400, matches.length * 30 + 200) }}>
+        <svg
+          className="absolute inset-0 pointer-events-none"
+          style={{ width: '100%', height: '100%', zIndex: 1 }}
+        >
+          {renderConnectors()}
+        </svg>
+
+        <div className="relative flex gap-8" style={{ zIndex: 2 }}>
+          {rounds.map((round, roundIndex) => {
+            const roundMatches = matchesByRound[round];
+            const isFinalRound = round === rounds.length;
+            return (
+              <div key={round} className="flex flex-col" style={{ minWidth: 260 }}>
+                <div className="text-center mb-4 bracket-round-label bracket-round-label-active">
+                  <span className="badge-gold text-sm px-3 py-1">
+                    {getRoundLabel(round, rounds.length)}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-6 flex-1 relative">
+                  {roundMatches.map((m, matchIndex) => {
+                    const pro = getTeamById(m.proTeamId);
+                    const con = getTeamById(m.conTeamId);
+                    const won = m.winner;
+                    const isChampionMatch = championPath.matchIds.has(m.id);
+                    const isHovered = hoveredMatchId === m.id;
+                    const isProWinner = won === 'pro';
+                    const isConWinner = won === 'con';
+                    const isProInPath = championPath.teamIds.has(m.proTeamId);
+                    const isConInPath = championPath.teamIds.has(m.conTeamId);
+                    const isBye = m.conTeamId === '__bye__';
+
+                    const animationDelay = `${roundIndex * 0.15 + matchIndex * 0.08}s`;
+                    const isChampion = isFinalRound && (isProWinner || isConWinner);
+
+                    return (
+                      <div
+                        key={m.id}
+                        className={`relative card p-3 text-sm bracket-match ${
+                          isChampionMatch ? 'winner-card' : ''
+                        } ${isHovered ? 'ring-2 ring-gold-400/50' : ''}`}
+                        style={{
+                          animation: `slideInRight 0.5s cubic-bezier(0.16, 1, 0.3, 1) ${animationDelay} both`,
+                        }}
+                        onMouseEnter={() => setHoveredMatchId(m.id)}
+                        onMouseLeave={() => setHoveredMatchId(null)}
+                      >
+                        {isChampion && (
+                          <div className="absolute -top-3 left-1/2 -translate-x-1/2 champion-badge">
+                            <span className="bg-gradient-gold text-white text-xs px-2 py-0.5 rounded-full shadow-lg font-bold">
+                              👑 冠军
+                            </span>
+                          </div>
+                        )}
+
+                        {isBye ? (
+                          <div className={`rounded-md px-2.5 py-2 border ${
+                            isProInPath ? 'bracket-team-winner bracket-team' : 'bg-emerald-50/50 border border-emerald-100'
+                          }`}>
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium text-navy-800 truncate">{pro?.name ?? '待定'}</span>
+                              <span className="text-gold-600 text-xs font-medium">轮空晋级</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className={`rounded-md px-2.5 py-1.5 mb-1 bracket-team border ${
+                              isProWinner
+                                ? 'bracket-team-winner'
+                                : isConWinner
+                                ? 'bracket-team-loser'
+                                : 'bg-emerald-50/50 border-emerald-100'
+                            } ${isProInPath && !isProWinner ? 'bracket-team-winner' : ''}`}>
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium text-navy-800 truncate">{pro?.name ?? '待定'}</span>
+                                {isProWinner && (
+                                  <span className="text-gold-600 text-xs font-bold flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-gold-500 animate-pulse" />
+                                    晋级
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-center py-0.5">
+                              <div className="h-px flex-1 bg-gradient-to-r from-transparent via-gold-300/50 to-transparent" />
+                              <span className="text-gold-500 text-[10px] font-semibold px-2">VS</span>
+                              <div className="h-px flex-1 bg-gradient-to-l from-transparent via-gold-300/50 to-transparent" />
+                            </div>
+
+                            <div className={`rounded-md px-2.5 py-1.5 bracket-team border ${
+                              isConWinner
+                                ? 'bracket-team-winner'
+                                : isProWinner
+                                ? 'bracket-team-loser'
+                                : 'bg-red-50/50 border-red-100'
+                            } ${isConInPath && !isConWinner ? 'bracket-team-winner' : ''}`}>
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium text-navy-800 truncate">{con?.name ?? '待定'}</span>
+                                {isConWinner && (
+                                  <span className="text-gold-600 text-xs font-bold flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-gold-500 animate-pulse" />
+                                    晋级
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

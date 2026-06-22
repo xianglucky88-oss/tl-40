@@ -258,3 +258,123 @@ html, body, #root {
 .animate-fade-in {
   animation: fadeIn 0.3s ease-out both;
 }
+
+@keyframes bracketFlow {
+  0% {
+    stroke-dashoffset: 1000;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes bracketPulse {
+  0%, 100% {
+    opacity: 0.4;
+    filter: drop-shadow(0 0 2px rgba(212, 165, 116, 0.3));
+  }
+  50% {
+    opacity: 1;
+    filter: drop-shadow(0 0 8px rgba(212, 165, 116, 0.6));
+  }
+}
+
+@keyframes winnerGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(212, 165, 116, 0);
+  }
+  50% {
+    box-shadow: 0 0 20px 4px rgba(212, 165, 116, 0.5), 0 0 40px 8px rgba(212, 165, 116, 0.2);
+  }
+}
+
+@keyframes slideInRight {
+  0% {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes championCrown {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-3px) scale(1.02);
+  }
+}
+
+@keyframes pathGlow {
+  0%, 100% {
+    stroke-width: 2;
+    opacity: 0.6;
+  }
+  50% {
+    stroke-width: 4;
+    opacity: 1;
+  }
+}
+
+.bracket-connector {
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  animation: bracketFlow 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.bracket-connector-active {
+  animation: bracketFlow 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards,
+             bracketPulse 2s ease-in-out infinite 1.2s;
+}
+
+.bracket-connector-path {
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  animation: bracketFlow 1s cubic-bezier(0.4, 0, 0.2, 1) forwards,
+             pathGlow 2.5s ease-in-out infinite 1s;
+}
+
+.winner-card {
+  animation: winnerGlow 2.5s ease-in-out infinite;
+}
+
+.slide-in-right {
+  animation: slideInRight 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.champion-badge {
+  animation: championCrown 2s ease-in-out infinite;
+}
+
+.bracket-match {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.bracket-match:hover {
+  transform: translateX(4px) scale(1.02);
+}
+
+.bracket-team {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.bracket-team-winner {
+  background: linear-gradient(135deg, rgba(212, 165, 116, 0.15) 0%, rgba(194, 135, 79, 0.1) 100%);
+  border-color: rgba(212, 165, 116, 0.5);
+}
+
+.bracket-team-loser {
+  opacity: 0.4;
+  filter: grayscale(0.3);
+}
+
+.bracket-round-label {
+  transition: all 0.3s ease;
+}
+
+.bracket-round-label-active {
+  transform: scale(1.05);
+}
