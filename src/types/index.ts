@@ -282,6 +282,13 @@ export interface AvoidanceConflict {
   type: 'team' | 'institution' | 'player';
 }
 
+export interface DanmakuFilter {
+  blockedKeywords: string[];
+  regexPatterns: string[];
+  visibleSides: ('pro' | 'con' | 'neutral')[];
+  enabled: boolean;
+}
+
 export interface Danmaku {
   id: string;
   matchId: string;

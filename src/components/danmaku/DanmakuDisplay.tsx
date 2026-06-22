@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useDebateStore } from '@/store/debateStore';
+import DanmakuFilterPanel from './DanmakuFilterPanel';
 import {
   MessageSquareText,
   Eye,
@@ -10,6 +11,7 @@ import {
   ChevronUp,
   ChevronDown,
   Layers,
+  Shield,
 } from 'lucide-react';
 import type { Danmaku } from '@/types';
 
@@ -37,15 +39,24 @@ export const DanmakuDisplay = ({ matchId }: DanmakuDisplayProps) => {
   const isDanmakuEnabled = useDebateStore((s) => s.isDanmakuEnabled);
   const setDanmakuEnabled = useDebateStore((s) => s.setDanmakuEnabled);
   const clearDanmakuByMatch = useDebateStore((s) => s.clearDanmakuByMatch);
+  const filterDanmaku = useDebateStore((s) => s.filterDanmaku);
+  const getDanmakuFilter = useDebateStore((s) => s.getDanmakuFilter);
 
   const [enabled, setEnabled] = useState(() => isDanmakuEnabled(matchId));
   const [showSettings, setShowSettings] = useState(false);
+  const [showFilter, setShowFilter] = useState(false);
   const [showList, setShowList] = useState(false);
   const [floating, setFloating] = useState<FloatingItem[]>([]);
   const [allDanmaku, setAllDanmaku] = useState<Danmaku[]>([]);
   const [mode, setMode] = useState<'scroll' | 'list'>('scroll');
   const [speed, setSpeed] = useState<'slow' | 'normal' | 'fast'>('normal');
   const [, forceTick] = useState(0);
+
+  const currentFilter = getDanmakuFilter(matchId);
+
+  const filteredDanmaku = useMemo(() => {
+    return filterDanmaku(matchId, allDanmaku);
+  }, [allDanmaku, matchId, filterDanmaku, currentFilter]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const listScrollRef = useRef<HTMLDivElement>(null);
@@ -196,7 +207,7 @@ export const DanmakuDisplay = ({ matchId }: DanmakuDisplayProps) => {
         lastSpawnCheck = now;
 
         setFloating((prev) => {
-          const pool = allDanmaku;
+          const pool = filteredDanmaku;
           if (pool.length === 0) return prev;
 
           const maxRows = getMaxRows();
@@ -236,19 +247,19 @@ export const DanmakuDisplay = ({ matchId }: DanmakuDisplayProps) => {
     return () => {
       cancelAnimationFrame(raf);
     };
-  }, [mode, enabled, speedMs, allDanmaku, launchDanmaku, getMaxRows]);
+  }, [mode, enabled, speedMs, filteredDanmaku, launchDanmaku, getMaxRows]);
 
   useEffect(() => {
     if (listScrollRef.current && mode === 'list') {
       listScrollRef.current.scrollTop = listScrollRef.current.scrollHeight;
     }
-  }, [allDanmaku.length, mode]);
+  }, [filteredDanmaku.length, mode]);
 
   useEffect(() => {
     if (historyScrollRef.current && showList) {
       historyScrollRef.current.scrollTop = 0;
     }
-  }, [allDanmaku.length, showList]);
+  }, [filteredDanmaku.length, showList]);
 
   const toggleEnabled = () => {
     const next = !enabled;
@@ -274,7 +285,12 @@ export const DanmakuDisplay = ({ matchId }: DanmakuDisplayProps) => {
         <div className="flex items-center gap-2">
           <MessageSquareText className="w-4 h-4 text-gold-500" />
           <h3 className="font-serif text-base font-bold text-navy-900">实时弹幕</h3>
-          <span className="text-[11px] text-navy-400">共 {allDanmaku.length} 条</span>
+          <span className="text-[11px] text-navy-400">
+            共 {allDanmaku.length} 条
+            {currentFilter.enabled && filteredDanmaku.length !== allDanmaku.length && (
+              <span className="text-gold-600 ml-1">显示 {filteredDanmaku.length} 条</span>
+            )}
+          </span>
         </div>
         <div className="flex items-center gap-1">
           <div className="flex bg-navy-100/60 rounded-lg p-0.5 mr-2">
@@ -314,6 +330,21 @@ export const DanmakuDisplay = ({ matchId }: DanmakuDisplayProps) => {
             }`}
           >
             {enabled ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowFilter((v) => !v)}
+            title="智能过滤"
+            className={`p-1.5 rounded-md transition-colors ${
+              showFilter
+                ? 'bg-gold-50 text-gold-600 hover:bg-gold-100'
+                : currentFilter.enabled
+                ? 'bg-gold-50/60 text-gold-500 hover:bg-gold-100'
+                : 'bg-navy-50 text-navy-500 hover:bg-navy-100'
+            }`}
+          >
+            <Shield className="w-4 h-4" />
           </button>
 
           <button
@@ -401,6 +432,8 @@ export const DanmakuDisplay = ({ matchId }: DanmakuDisplayProps) => {
         </div>
       )}
 
+      {showFilter && <DanmakuFilterPanel matchId={matchId} />}
+
       {!enabled && (
         <div className="flex items-center justify-center py-14 text-navy-400 text-sm">
           <div className="text-center">
@@ -470,13 +503,13 @@ export const DanmakuDisplay = ({ matchId }: DanmakuDisplayProps) => {
           className="overflow-y-auto scroll-thin bg-gradient-to-b from-white to-navy-50/30"
           style={{ height: 280 }}
         >
-          {allDanmaku.length === 0 ? (
+          {filteredDanmaku.length === 0 ? (
             <div className="flex items-center justify-center py-14 text-navy-300 text-sm">
-              暂无弹幕消息
+              {currentFilter.enabled ? '当前过滤条件下无弹幕' : '暂无弹幕消息'}
             </div>
           ) : (
             <div className="p-3 space-y-1.5">
-              {allDanmaku.slice(-120).map((d, idx) => (
+              {filteredDanmaku.slice(-120).map((d, idx) => (
                 <div
                   key={d.id}
                   className={`flex items-start gap-2 px-3 py-2 rounded-lg text-sm border ${
@@ -541,11 +574,13 @@ export const DanmakuDisplay = ({ matchId }: DanmakuDisplayProps) => {
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
-          {allDanmaku.length === 0 ? (
-            <div className="py-10 text-center text-xs text-navy-300">暂无弹幕历史</div>
+          {filteredDanmaku.length === 0 ? (
+            <div className="py-10 text-center text-xs text-navy-300">
+              {currentFilter.enabled ? '当前过滤条件下无弹幕历史' : '暂无弹幕历史'}
+            </div>
           ) : (
             <div className="p-2.5 space-y-1">
-              {allDanmaku
+              {filteredDanmaku
                 .slice()
                 .reverse()
                 .slice(0, 200)

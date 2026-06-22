@@ -13,6 +13,7 @@ import {
   DebateFormat,
   Danmaku,
   DanmakuChannelMessage,
+  DanmakuFilter,
   ArchivedTournament,
   ArchiveFilter,
   ArchivedMatch,
@@ -65,6 +66,7 @@ interface DebateState {
 
   danmakuList: Danmaku[];
   danmakuEnabledByMatch: Record<string, boolean>;
+  danmakuFilterByMatch: Record<string, DanmakuFilter>;
 
   archivedTournaments: ArchivedTournament[];
 
@@ -123,6 +125,16 @@ interface DebateState {
   subscribeDanmakuChannel: (matchId: string, callback: (d: Danmaku) => void) => () => void;
   checkDanmakuRateLimit: (matchId: string, senderName: string) => { allowed: boolean; waitSeconds?: number };
 
+  getDanmakuFilter: (matchId: string) => DanmakuFilter;
+  setDanmakuFilter: (matchId: string, filter: DanmakuFilter) => void;
+  addBlockedKeyword: (matchId: string, keyword: string) => void;
+  removeBlockedKeyword: (matchId: string, keyword: string) => void;
+  addRegexPattern: (matchId: string, pattern: string) => void;
+  removeRegexPattern: (matchId: string, pattern: string) => void;
+  toggleFilterSide: (matchId: string, side: 'pro' | 'con' | 'neutral') => void;
+  setFilterEnabled: (matchId: string, enabled: boolean) => void;
+  filterDanmaku: (matchId: string, danmakuList: Danmaku[]) => Danmaku[];
+
   getArchivedTournamentById: (id: string) => ArchivedTournament | undefined;
   getArchivedMatchesByTournament: (tournamentId: string) => ArchivedMatch[];
   getArchivedMatchesByRound: (tournamentId: string, round: number) => ArchivedMatch[];
@@ -176,6 +188,7 @@ export const useDebateStore = create<DebateState>()(
 
       danmakuList: [],
       danmakuEnabledByMatch: {},
+      danmakuFilterByMatch: {},
 
       archivedTournaments: defaultArchivedTournaments,
       arguments: defaultArguments,
@@ -635,8 +648,119 @@ export const useDebateStore = create<DebateState>()(
 
         return () => {
           danmakuChannel?.removeEventListener('message', handleMessage);
-          window.removeEventListener('storage', handleStorage);
+        window.removeEventListener('storage', handleStorage);
         };
+      },
+
+      getDanmakuFilter: (matchId) => {
+        const existing = get().danmakuFilterByMatch[matchId];
+        if (existing) return existing;
+        return {
+          blockedKeywords: [],
+          regexPatterns: [],
+          visibleSides: ['pro', 'con', 'neutral'],
+          enabled: false,
+        };
+      },
+
+      setDanmakuFilter: (matchId, filter) => {
+        set((s) => ({
+          danmakuFilterByMatch: {
+            ...s.danmakuFilterByMatch,
+            [matchId]: filter,
+          },
+        }));
+      },
+
+      addBlockedKeyword: (matchId, keyword) => {
+        const trimmed = keyword.trim();
+        if (!trimmed) return;
+        const current = get().getDanmakuFilter(matchId);
+        if (current.blockedKeywords.includes(trimmed)) return;
+        get().setDanmakuFilter(matchId, {
+          ...current,
+          blockedKeywords: [...current.blockedKeywords, trimmed],
+        });
+      },
+
+      removeBlockedKeyword: (matchId, keyword) => {
+        const current = get().getDanmakuFilter(matchId);
+        get().setDanmakuFilter(matchId, {
+          ...current,
+          blockedKeywords: current.blockedKeywords.filter((k) => k !== keyword),
+        });
+      },
+
+      addRegexPattern: (matchId, pattern) => {
+        const trimmed = pattern.trim();
+        if (!trimmed) return;
+        try {
+          new RegExp(trimmed);
+        } catch {
+          return;
+        }
+        const current = get().getDanmakuFilter(matchId);
+        if (current.regexPatterns.includes(trimmed)) return;
+        get().setDanmakuFilter(matchId, {
+          ...current,
+          regexPatterns: [...current.regexPatterns, trimmed],
+        });
+      },
+
+      removeRegexPattern: (matchId, pattern) => {
+        const current = get().getDanmakuFilter(matchId);
+        get().setDanmakuFilter(matchId, {
+          ...current,
+          regexPatterns: current.regexPatterns.filter((p) => p !== pattern),
+        });
+      },
+
+      toggleFilterSide: (matchId, side) => {
+        const current = get().getDanmakuFilter(matchId);
+        const isVisible = current.visibleSides.includes(side);
+        const next = isVisible
+          ? current.visibleSides.filter((s) => s !== side)
+          : [...current.visibleSides, side];
+        if (next.length === 0) return;
+        get().setDanmakuFilter(matchId, {
+          ...current,
+          visibleSides: next,
+        });
+      },
+
+      setFilterEnabled: (matchId, enabled) => {
+        const current = get().getDanmakuFilter(matchId);
+        get().setDanmakuFilter(matchId, { ...current, enabled });
+      },
+
+      filterDanmaku: (matchId, danmakuList) => {
+        const filter = get().getDanmakuFilter(matchId);
+        if (!filter.enabled) return danmakuList;
+
+        let compiledRegexes: RegExp[] = [];
+        for (const p of filter.regexPatterns) {
+          try {
+            compiledRegexes.push(new RegExp(p, 'i'));
+          } catch {
+            // skip invalid
+          }
+        }
+
+        return danmakuList.filter((d) => {
+          const side = d.senderSide ?? 'neutral';
+          if (!filter.visibleSides.includes(side)) return false;
+
+          const content = d.content.toLowerCase();
+          for (const kw of filter.blockedKeywords) {
+            if (content.includes(kw.toLowerCase())) return false;
+          }
+
+          for (const re of compiledRegexes) {
+            if (re.test(d.content)) return false;
+          }
+
+          return true;
+        });
       },
 
       getArchivedTournamentById: (id) => {
@@ -922,6 +1046,7 @@ export const useDebateStore = create<DebateState>()(
         activeMatchId: state.activeMatchId,
         danmakuList: state.danmakuList,
         danmakuEnabledByMatch: state.danmakuEnabledByMatch,
+        danmakuFilterByMatch: state.danmakuFilterByMatch,
         archivedTournaments: state.archivedTournaments,
         arguments: state.arguments,
       }),
