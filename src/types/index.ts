@@ -163,6 +163,7 @@ export interface MatchPairing {
   status: MatchStatus;
   scores?: MatchScore;
   winner?: Winner;
+  scheduledAt?: number;
   startedAt?: number;
   finishedAt?: number;
   currentStageIndex?: number;
@@ -279,7 +280,9 @@ export interface AvoidanceConflict {
   teamId: string;
   teamName: string;
   reason: string;
-  type: 'team' | 'institution' | 'player';
+  type: 'team' | 'institution' | 'player' | 'time';
+  conflictingMatchId?: string;
+  conflictingMatchTime?: number;
 }
 
 export interface DanmakuFilter {

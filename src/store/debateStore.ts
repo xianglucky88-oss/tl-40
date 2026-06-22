@@ -339,7 +339,16 @@ export const useDebateStore = create<DebateState>()(
             const assignedIds = advanced
               .filter((mm) => mm.round === nextRound)
               .flatMap((mm) => mm.judgeIds);
-            const js = assignJudges(pro ?? null, con ?? null, judges, assignedIds, judgesPerMatch);
+            const js = assignJudges({
+              proTeam: pro ?? null,
+              conTeam: con ?? null,
+              judges,
+              alreadyAssigned: assignedIds,
+              count: judgesPerMatch,
+              scheduledAt: m.scheduledAt,
+              allMatches: advanced,
+              currentMatchId: m.id,
+            });
             return { ...m, judgeIds: js.map((j) => j.id) };
           });
           set({
@@ -384,7 +393,12 @@ export const useDebateStore = create<DebateState>()(
         const s = get();
         const m = s.matches.find((x) => x.id === matchId);
         if (!m) return [];
-        return checkAvoidanceConflicts(m, s.teams, s.judges);
+        return checkAvoidanceConflicts({
+          match: m,
+          teams: s.teams,
+          judges: s.judges,
+          allMatches: s.matches,
+        });
       },
 
       submitJudgeScore: (matchId, judgeId, score) => {

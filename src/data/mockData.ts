@@ -19,6 +19,7 @@ import {
 } from '@/types';
 import { uid } from '@/engines/scoringEngine';
 import { getFormatRules } from '@/engines/formatRules';
+import { calculateMatchSchedule } from '@/engines/tournamentEngine';
 
 const now = Date.now();
 
@@ -235,6 +236,7 @@ export const buildSampleMatches = (
   for (let i = 0; i < teams.length; i += 2) {
     if (i + 1 < teams.length) {
       const matchNum = i / 2 + 1;
+      const scheduledAt = calculateMatchSchedule(1, matchNum);
       const judgeIds = judges.slice((matchNum - 1) * 3, matchNum * 3).map((j) => j.id);
       pairs.push({
         id: uid(),
@@ -246,6 +248,7 @@ export const buildSampleMatches = (
         topicId: mandarinTopics[(matchNum - 1) % mandarinTopics.length].id,
         judgeIds: judgeIds.length ? judgeIds : [judges[0].id, judges[1].id, judges[2].id],
         status: matchNum === 1 ? 'ongoing' : 'pending',
+        scheduledAt,
         startedAt: matchNum === 1 ? now - 1000 * 60 * 10 : undefined,
       });
     }
@@ -255,16 +258,19 @@ export const buildSampleMatches = (
   for (let round = 2; round <= totalRounds; round++) {
     const count = Math.max(1, Math.floor(teams.length / Math.pow(2, round)));
     for (let m = 0; m < count; m++) {
+      const matchNumber = m + 1;
+      const scheduledAt = calculateMatchSchedule(round, matchNumber);
       pairs.push({
         id: uid(),
         tournamentId: tournament.id,
         round,
-        matchNumber: m + 1,
+        matchNumber,
         proTeamId: `__tbd_r${round}_${m}_a`,
         conTeamId: `__tbd_r${round}_${m}_b`,
         topicId: mandarinTopics[m % mandarinTopics.length].id,
         judgeIds: [],
         status: 'pending',
+        scheduledAt,
       });
     }
   }

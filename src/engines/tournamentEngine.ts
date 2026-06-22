@@ -12,6 +12,31 @@ import { uid } from './scoringEngine';
 
 const randFloat = () => Math.random();
 
+export const calculateMatchSchedule = (
+  round: number,
+  matchNumber: number,
+  baseDate?: number,
+  matchesPerSession: number = 4,
+  matchIntervalMinutes: number = 10,
+  sessionStartHour: number = 9
+): number => {
+  const base = baseDate ?? Date.now();
+  const date = new Date(base);
+  date.setHours(0, 0, 0, 0);
+
+  const dayOffset = round - 1;
+  const sessionIndex = Math.floor((matchNumber - 1) / matchesPerSession);
+  const matchInSession = (matchNumber - 1) % matchesPerSession;
+
+  const hour = sessionStartHour + sessionIndex * 2;
+  const minute = matchInSession * matchIntervalMinutes;
+
+  date.setDate(date.getDate() + dayOffset);
+  date.setHours(hour, minute, 0, 0);
+
+  return date.getTime();
+};
+
 export const shuffle = <T>(arr: T[]): T[] => {
   const copy = [...arr];
   for (let i = copy.length - 1; i > 0; i--) {
@@ -86,38 +111,44 @@ export const generateSingleElimination = (
 
   round1Pairs.forEach((pair, i) => {
     const topicId = nextTopic();
-    const judgeIds = assignJudges(
-      pair.pro,
-      pair.con,
+    const matchNumber = i + 1;
+    const scheduledAt = calculateMatchSchedule(1, matchNumber);
+    const judgeIds = assignJudges({
+      proTeam: pair.pro,
+      conTeam: pair.con,
       judges,
-      [],
-      judgesPerMatch
-    ).map((j) => j.id);
+      alreadyAssigned: [],
+      count: judgesPerMatch,
+      scheduledAt,
+      allMatches: pairings,
+    }).map((j) => j.id);
 
     if (pair.con == null) {
       pairings.push({
         id: uid(),
         tournamentId,
         round: 1,
-        matchNumber: i + 1,
+        matchNumber,
         proTeamId: pair.pro.id,
         conTeamId: '__bye__',
         topicId,
         judgeIds,
         status: 'finished',
         winner: 'pro',
+        scheduledAt,
       });
     } else {
       pairings.push({
         id: uid(),
         tournamentId,
         round: 1,
-        matchNumber: i + 1,
+        matchNumber,
         proTeamId: pair.pro.id,
         conTeamId: pair.con.id,
         topicId,
         judgeIds,
         status: 'pending',
+        scheduledAt,
       });
     }
   });
@@ -127,16 +158,19 @@ export const generateSingleElimination = (
     const matchCount = prevRoundMatches.length / 2;
     const newMatches: MatchPairing[] = [];
     for (let i = 0; i < matchCount; i++) {
+      const matchNumber = i + 1;
+      const scheduledAt = calculateMatchSchedule(round, matchNumber);
       newMatches.push({
         id: uid(),
         tournamentId,
         round,
-        matchNumber: i + 1,
+        matchNumber,
         proTeamId: `__tbd_r${round}_${i}_a`,
         conTeamId: `__tbd_r${round}_${i}_b`,
         topicId: nextTopic(),
         judgeIds: [],
         status: 'pending',
+        scheduledAt,
       });
     }
     pairings.push(...newMatches);
@@ -181,17 +215,28 @@ export const generateRoundRobin = (
         const proFirst = round % 2 === 0;
         const pro = proFirst ? teamA : teamB;
         const con = proFirst ? teamB : teamA;
-        const judgeIds = assignJudges(pro, con, judges, [], judgesPerMatch).map((j) => j.id);
+        const currentMatchNumber = matchNum++;
+        const scheduledAt = calculateMatchSchedule(round + 1, currentMatchNumber);
+        const judgeIds = assignJudges({
+          proTeam: pro,
+          conTeam: con,
+          judges,
+          alreadyAssigned: [],
+          count: judgesPerMatch,
+          scheduledAt,
+          allMatches: pairings,
+        }).map((j) => j.id);
         pairings.push({
           id: uid(),
           tournamentId,
           round: round + 1,
-          matchNumber: matchNum++,
+          matchNumber: currentMatchNumber,
           proTeamId: pro.id,
           conTeamId: con.id,
           topicId: nextTopic(),
           judgeIds,
           status: 'pending',
+          scheduledAt,
         });
       }
     }
@@ -275,17 +320,28 @@ export const generateSwissRound = (
       const proFirst = round % 2 === 0;
       const pro = proFirst ? t1 : opponent;
       const con = proFirst ? opponent : t1;
-      const judgeIds = assignJudges(pro, con, judges, [], judgesPerMatch).map((j) => j.id);
+      const currentMatchNumber = matchNum++;
+      const scheduledAt = calculateMatchSchedule(round, currentMatchNumber);
+      const judgeIds = assignJudges({
+        proTeam: pro,
+        conTeam: con,
+        judges,
+        alreadyAssigned: [],
+        count: judgesPerMatch,
+        scheduledAt,
+        allMatches: pairings,
+      }).map((j) => j.id);
       pairings.push({
         id: uid(),
         tournamentId,
         round,
-        matchNumber: matchNum++,
+        matchNumber: currentMatchNumber,
         proTeamId: pro.id,
         conTeamId: con.id,
         topicId: nextTopic(),
         judgeIds,
         status: 'pending',
+        scheduledAt,
       });
     }
   }
@@ -293,17 +349,85 @@ export const generateSwissRound = (
   return pairings;
 };
 
-export const assignJudges = (
-  proTeam: Team | null,
-  conTeam: Team | null,
-  judges: Judge[],
-  alreadyAssigned: string[],
-  count: number
-): Judge[] => {
-  const scored: { judge: Judge; score: number }[] = judges
+const MATCH_DURATION_MS = 90 * 60 * 1000;
+
+const hasTimeConflict = (
+  judgeId: string,
+  scheduledAt: number | undefined,
+  allMatches: MatchPairing[],
+  currentMatchId?: string,
+  matchDuration: number = MATCH_DURATION_MS
+): { conflict: boolean; conflictingMatch?: MatchPairing } => {
+  if (!scheduledAt) return { conflict: false };
+
+  for (const m of allMatches) {
+    if (currentMatchId && m.id === currentMatchId) continue;
+    if (!m.scheduledAt) continue;
+    if (!m.judgeIds.includes(judgeId)) continue;
+
+    const matchStart = m.scheduledAt;
+    const matchEnd = matchStart + matchDuration;
+    const newStart = scheduledAt;
+    const newEnd = scheduledAt + matchDuration;
+
+    if (newStart < matchEnd && newEnd > matchStart) {
+      return { conflict: true, conflictingMatch: m };
+    }
+  }
+
+  return { conflict: false };
+};
+
+const calculateJudgeWorkload = (judgeId: string, allMatches: MatchPairing[]): number => {
+  return allMatches.filter((m) => m.judgeIds.includes(judgeId)).length;
+};
+
+export interface AssignJudgesOptions {
+  proTeam: Team | null;
+  conTeam: Team | null;
+  judges: Judge[];
+  alreadyAssigned: string[];
+  count: number;
+  scheduledAt?: number;
+  allMatches?: MatchPairing[];
+  currentMatchId?: string;
+  matchDuration?: number;
+  workloadWeight?: number;
+}
+
+export const assignJudges = (options: AssignJudgesOptions): Judge[] => {
+  const {
+    proTeam,
+    conTeam,
+    judges,
+    alreadyAssigned,
+    count,
+    scheduledAt,
+    allMatches = [],
+    currentMatchId,
+    matchDuration = MATCH_DURATION_MS,
+    workloadWeight = 30,
+  } = options;
+
+  const workloadMap: Record<string, number> = {};
+  judges.forEach((j) => {
+    workloadMap[j.id] = calculateJudgeWorkload(j.id, allMatches);
+  });
+
+  const maxWorkload = Math.max(...Object.values(workloadMap), 1);
+
+  const scored: { judge: Judge; score: number; hasConflict: boolean }[] = judges
     .filter((j) => !alreadyAssigned.includes(j.id))
     .map((j) => {
       let score = 0;
+      let hasConflict = false;
+
+      const timeCheck = hasTimeConflict(j.id, scheduledAt, allMatches, currentMatchId, matchDuration);
+      if (timeCheck.conflict) {
+        score -= 2000;
+        hasConflict = true;
+      }
+
       if (proTeam) {
         if (j.avoidTeams.includes(proTeam.id)) score -= 1000;
         if (j.avoidInstitutions.includes(proTeam.institution)) score -= 500;
@@ -318,21 +442,39 @@ export const assignJudges = (
           if (j.avoidPlayers.includes(p.id)) score -= 800;
         });
       }
+
       if (proTeam && j.institution === proTeam.institution) score -= 50;
       if (conTeam && j.institution === conTeam.institution) score -= 50;
+
+      const workload = workloadMap[j.id] || 0;
+      const workloadScore = (1 - workload / Math.max(maxWorkload, 1)) * workloadWeight;
+      score += workloadScore;
+
       score += Math.random() * 10;
-      return { judge: j, score };
+
+      return { judge: j, score, hasConflict };
     });
 
-  scored.sort((a, b) => b.score - a.score);
+  scored.sort((a, b) => {
+    if (a.hasConflict !== b.hasConflict) {
+      return a.hasConflict ? 1 : -1;
+    }
+    return b.score - a.score;
+  });
+
   return scored.slice(0, count).map((s) => s.judge);
 };
 
-export const checkAvoidanceConflicts = (
-  match: MatchPairing,
-  teams: Team[],
-  judges: Judge[]
-): AvoidanceConflict[] => {
+export interface CheckConflictsOptions {
+  match: MatchPairing;
+  teams: Team[];
+  judges: Judge[];
+  allMatches?: MatchPairing[];
+  matchDuration?: number;
+}
+
+export const checkAvoidanceConflicts = (options: CheckConflictsOptions): AvoidanceConflict[] => {
+  const { match, teams, judges, allMatches = [], matchDuration = MATCH_DURATION_MS } = options;
   const conflicts: AvoidanceConflict[] = [];
   const proTeam = teams.find((t) => t.id === match.proTeamId);
   const conTeam = teams.find((t) => t.id === match.conTeamId);
@@ -341,6 +483,23 @@ export const checkAvoidanceConflicts = (
   match.judgeIds.forEach((judgeId) => {
     const j = judges.find((x) => x.id === judgeId);
     if (!j) return;
+
+    const timeCheck = hasTimeConflict(judgeId, match.scheduledAt, allMatches, match.id, matchDuration);
+    if (timeCheck.conflict && timeCheck.conflictingMatch) {
+      const cm = timeCheck.conflictingMatch;
+      const pro = teams.find((t) => t.id === cm.proTeamId);
+      const con = teams.find((t) => t.id === cm.conTeamId);
+      conflicts.push({
+        judgeId: j.id,
+        judgeName: j.name,
+        teamId: proTeam.id,
+        teamName: `${proTeam.name} vs ${conTeam.name}`,
+        reason: `评委时间冲突：同时担任「${pro?.name ?? '未知'} vs ${con?.name ?? '未知'}」评委`,
+        type: 'time',
+        conflictingMatchId: cm.id,
+        conflictingMatchTime: cm.scheduledAt,
+      });
+    }
 
     const checkTeam = (team: Team, side: string) => {
       if (j.avoidTeams.includes(team.id)) {
