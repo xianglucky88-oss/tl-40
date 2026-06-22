@@ -42,6 +42,37 @@ export interface Judge {
 
 export type TopicCategory = '政策' | '价值' | '事实' | '模拟法庭';
 
+export interface TopicCategoryConfig {
+  name: TopicCategory;
+  label: string;
+  color: string;
+  bgColor: string;
+  ringColor: string;
+  description: string;
+  keywords: string[];
+  order: number;
+}
+
+export interface ClassificationSuggestion {
+  topicId: string;
+  currentCategories: TopicCategory[];
+  suggestedCategories: TopicCategory[];
+  confidence: number;
+  reasons: string[];
+}
+
+export type BatchOperationType = 'delete' | 'updateCategory' | 'updateDifficulty' | 'updateFormat' | 'addClassification';
+
+export interface BatchUpdatePayload {
+  type: BatchOperationType;
+  topicIds: string[];
+  category?: TopicCategory[];
+  difficulty?: 1 | 2 | 3 | 4 | 5;
+  formats?: DebateFormat[];
+  addCategory?: TopicCategory[];
+  removeCategory?: TopicCategory[];
+}
+
 export interface Topic {
   id: string;
   title: string;

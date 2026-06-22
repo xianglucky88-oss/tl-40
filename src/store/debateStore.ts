@@ -21,6 +21,8 @@ import {
   ArgumentNode,
   ArgumentSide,
   ArgumentTree,
+  TopicCategory,
+  BatchUpdatePayload,
 } from '@/types';
 import {
   buildInitialTeams,
@@ -90,6 +92,10 @@ interface DebateState {
   addTopic: (t: Omit<Topic, 'id'>) => void;
   updateTopic: (id: string, patch: Partial<Topic>) => void;
   removeTopic: (id: string) => void;
+  batchUpdateTopics: (payload: BatchUpdatePayload) => { success: boolean; affectedCount: number };
+  batchDeleteTopics: (ids: string[]) => { success: boolean; affectedCount: number };
+  batchUpdateTopicCategory: (ids: string[], addCategories: TopicCategory[], removeCategories: TopicCategory[]) => { success: boolean; affectedCount: number };
+  applyClassificationSuggestions: (suggestions: { topicId: string; suggestedCategories: TopicCategory[] }[]) => { success: boolean; affectedCount: number };
 
   updateTournament: (patch: Partial<TournamentConfig>) => void;
   regenerateAllMatches: () => void;
@@ -260,6 +266,75 @@ export const useDebateStore = create<DebateState>()(
           topics: s.topics.map((t) => (t.id === id ? { ...t, ...patch } : t)),
         })),
       removeTopic: (id) => set((s) => ({ topics: s.topics.filter((t) => t.id !== id) })),
+
+      batchUpdateTopics: (payload) => {
+        const idSet = new Set(payload.topicIds);
+        if (idSet.size === 0) return { success: false, affectedCount: 0 };
+        let affectedCount = 0;
+        set((s) => ({
+          topics: s.topics.map((t) => {
+            if (!idSet.has(t.id)) return t;
+            affectedCount++;
+            switch (payload.type) {
+              case 'updateCategory':
+                return payload.category ? { ...t, category: payload.category } : t;
+              case 'updateDifficulty':
+                return payload.difficulty ? { ...t, difficulty: payload.difficulty } : t;
+              case 'updateFormat':
+                return payload.formats ? { ...t, formats: payload.formats } : t;
+              case 'addClassification': {
+                const addSet = new Set(payload.addCategory ?? []);
+                const removeSet = new Set(payload.removeCategory ?? []);
+                const newCats = [...new Set([...t.category.filter((c) => !removeSet.has(c)), ...addSet])];
+                return { ...t, category: newCats as TopicCategory[] };
+              }
+              default:
+                return t;
+            }
+          }),
+        }));
+        return { success: true, affectedCount };
+      },
+
+      batchDeleteTopics: (ids) => {
+        const idSet = new Set(ids);
+        if (idSet.size === 0) return { success: false, affectedCount: 0 };
+        const before = get().topics.length;
+        set((s) => ({ topics: s.topics.filter((t) => !idSet.has(t.id)) }));
+        return { success: true, affectedCount: before - get().topics.length };
+      },
+
+      batchUpdateTopicCategory: (ids, addCategories, removeCategories) => {
+        if (ids.length === 0) return { success: false, affectedCount: 0 };
+        const idSet = new Set(ids);
+        const addSet = new Set(addCategories);
+        const removeSet = new Set(removeCategories);
+        let affectedCount = 0;
+        set((s) => ({
+          topics: s.topics.map((t) => {
+            if (!idSet.has(t.id)) return t;
+            const newCats = [...new Set([...t.category.filter((c) => !removeSet.has(c)), ...addSet])];
+            affectedCount++;
+            return { ...t, category: newCats as TopicCategory[] };
+          }),
+        }));
+        return { success: true, affectedCount };
+      },
+
+      applyClassificationSuggestions: (suggestions) => {
+        if (suggestions.length === 0) return { success: false, affectedCount: 0 };
+        const suggestionMap = new Map(suggestions.map((s) => [s.topicId, s.suggestedCategories]));
+        let affectedCount = 0;
+        set((s) => ({
+          topics: s.topics.map((t) => {
+            const suggested = suggestionMap.get(t.id);
+            if (!suggested) return t;
+            affectedCount++;
+            return { ...t, category: suggested as TopicCategory[] };
+          }),
+        }));
+        return { success: true, affectedCount };
+      },
 
       updateTournament: (patch) =>
         set((s) => ({ tournament: { ...s.tournament, ...patch } })),
