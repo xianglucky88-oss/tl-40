@@ -18,6 +18,7 @@ import ArchivedTournamentDetailPage from "@/pages/ArchivedTournamentDetailPage";
 import MatchArchiveDetailPage from "@/pages/MatchArchiveDetailPage";
 import PlayersPage from "@/pages/PlayersPage";
 import PlayerProfilePage from "@/pages/PlayerProfilePage";
+import PlayerComparePage from "@/pages/PlayerComparePage";
 import AIDebatePage from "@/pages/AIDebatePage";
 import RulesHandbookPage from "@/pages/RulesHandbookPage";
 
@@ -46,6 +47,7 @@ export default function App() {
                 <Route path="/judge/:matchId" element={<JudgeScoringPage />} />
                 <Route path="/ranking" element={<RankingPage />} />
                 <Route path="/players" element={<PlayersPage />} />
+                <Route path="/player/compare/:idA/:idB" element={<PlayerComparePage />} />
                 <Route path="/player/:playerId" element={<PlayerProfilePage />} />
                 <Route path="/archive" element={<ArchivePage />} />
                 <Route path="/archive/:id" element={<ArchivedTournamentDetailPage />} />

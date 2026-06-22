@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useMemo, useCallback } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   User,
   Search,
@@ -9,6 +9,10 @@ import {
   Filter,
   Users,
   Award,
+  GitCompare,
+  CheckSquare,
+  Square,
+  X,
 } from 'lucide-react';
 import { useDebateStore } from '@/store/debateStore';
 import RankBadge from '@/components/ui/RankBadge';
@@ -17,9 +21,14 @@ import { cn } from '@/lib/utils';
 
 export default function PlayersPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const store = useDebateStore();
   const [keyword, setKeyword] = useState('');
   const [sortBy, setSortBy] = useState<'avgScore' | 'mvpCount' | 'totalMatches'>('avgScore');
+  const [compareMode, setCompareMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  const compareWithParam = searchParams.get('compareWith');
 
   const playerRankings = store.playerRankings();
 
@@ -87,30 +96,161 @@ export default function PlayersPage() {
     return [...allPlayers].sort((a, b) => b.avgScore - a.avgScore).slice(0, 3);
   }, [allPlayers]);
 
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= 2) return prev;
+      return [...prev, id];
+    });
+  }, []);
+
+  const startCompare = () => {
+    if (selectedIds.length === 2) {
+      navigate(`/player/compare/${selectedIds[0]}/${selectedIds[1]}`);
+    }
+  };
+
+  const startCompareWithPreselect = (idA: string, idB: string) => {
+    navigate(`/player/compare/${idA}/${idB}`);
+  };
+
   return (
     <div className="space-y-6 pb-16">
-      <div>
-        <h1 className="font-serif text-2xl md:text-3xl font-bold text-navy-900 flex items-center gap-2">
-          <User className="w-7 h-7 text-gold-500" />
-          辩手数据中心
-        </h1>
-        <p className="mt-1 text-sm text-navy-500">
-          共 {allPlayers.length} 位辩手，查看个人数据画像
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="font-serif text-2xl md:text-3xl font-bold text-navy-900 flex items-center gap-2">
+            <User className="w-7 h-7 text-gold-500" />
+            辩手数据中心
+          </h1>
+          <p className="mt-1 text-sm text-navy-500">
+            共 {allPlayers.length} 位辩手，查看个人数据画像
+          </p>
+        </div>
+        <button
+          onClick={() => {
+            if (compareMode) {
+              setSelectedIds([]);
+            }
+            setCompareMode(!compareMode);
+          }}
+          className={cn(
+            'flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg transition-colors',
+            compareMode
+              ? 'bg-gold-500 text-white hover:bg-gold-600'
+              : 'bg-gold-50 text-gold-600 hover:bg-gold-100'
+          )}
+        >
+          <GitCompare className="w-4 h-4" />
+          {compareMode ? '退出对比' : '横向对比'}
+        </button>
       </div>
+
+      {compareMode && (
+        <div className="card p-4 bg-gradient-to-r from-gold-50 to-navy-50 border-gold-200 stagger-fade-in">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <GitCompare className="w-5 h-5 text-gold-600" />
+              <span className="text-sm font-medium text-navy-800">
+                对比模式：选择 2 位辩手进行横向对比
+              </span>
+              <span className="text-sm text-navy-500">
+                已选 {selectedIds.length}/2
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {selectedIds.length > 0 && (
+                <button
+                  onClick={() => setSelectedIds([])}
+                  className="flex items-center gap-1 text-xs text-navy-500 hover:text-red-500 transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                  清除选择
+                </button>
+              )}
+              <button
+                onClick={startCompare}
+                disabled={selectedIds.length < 2}
+                className={cn(
+                  'btn-primary text-sm',
+                  selectedIds.length < 2 && 'opacity-50 cursor-not-allowed'
+                )}
+              >
+                <GitCompare className="w-4 h-4" />
+                开始对比
+              </button>
+            </div>
+          </div>
+          {selectedIds.length > 0 && (
+            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-navy-100/60">
+              {selectedIds.map((id) => {
+                const p = allPlayers.find((x) => x.playerId === id);
+                if (!p) return null;
+                return (
+                  <div key={id} className="flex items-center gap-2 bg-white/70 px-3 py-1.5 rounded-lg">
+                    <User className="w-4 h-4 text-navy-400" />
+                    <span className="text-sm font-medium text-navy-800">{p.playerName}</span>
+                    <button
+                      onClick={() => toggleSelect(id)}
+                      className="text-navy-400 hover:text-red-500 transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {compareWithParam && !compareMode && (
+        <div className="card p-4 bg-gold-50 border-gold-200 stagger-fade-in">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gold-700">
+              已预选一位辩手，再选一位即可开始对比
+            </span>
+            <button
+              onClick={() => {
+                setCompareMode(true);
+                setSelectedIds([compareWithParam]);
+              }}
+              className="btn-primary text-sm"
+            >
+              <GitCompare className="w-4 h-4" />
+              进入对比模式
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 stagger-fade-in">
         {top3Players.map((player, index) => (
           <div
             key={player.playerId}
-            onClick={() => navigate(`/player/${player.playerId}`)}
+            onClick={() => {
+              if (compareMode) {
+                toggleSelect(player.playerId);
+              } else {
+                navigate(`/player/${player.playerId}`);
+              }
+            }}
             className={cn(
-              'card p-5 cursor-pointer hover:shadow-card-hover transition-all duration-300 hover:-translate-y-0.5',
+              'card p-5 cursor-pointer hover:shadow-card-hover transition-all duration-300 hover:-translate-y-0.5 relative',
               index === 0 && 'bg-gradient-to-br from-gold-50 to-gold-100/40 border-gold-200',
               index === 1 && 'bg-gradient-to-br from-navy-50 to-navy-100/30 border-navy-200',
-              index === 2 && 'bg-gradient-to-br from-amber-50 to-amber-100/30 border-amber-200'
+              index === 2 && 'bg-gradient-to-br from-amber-50 to-amber-100/30 border-amber-200',
+              compareMode && selectedIds.includes(player.playerId) && 'ring-2 ring-gold-500 ring-offset-2'
             )}
           >
+            {compareMode && (
+              <div className="absolute top-3 right-3">
+                {selectedIds.includes(player.playerId) ? (
+                  <CheckSquare className="w-5 h-5 text-gold-600" />
+                ) : (
+                  <Square className="w-5 h-5 text-navy-300" />
+                )}
+              </div>
+            )}
             <div className="flex items-center gap-4">
               <div className="relative">
                 <div
@@ -143,7 +283,7 @@ export default function PlayersPage() {
                   </span>
                 </div>
               </div>
-              <ChevronRight className="w-5 h-5 text-navy-300 flex-shrink-0" />
+              {!compareMode && <ChevronRight className="w-5 h-5 text-navy-300 flex-shrink-0" />}
             </div>
           </div>
         ))}
@@ -181,8 +321,17 @@ export default function PlayersPage() {
           filteredPlayers.map((player) => (
             <div
               key={player.playerId}
-              onClick={() => navigate(`/player/${player.playerId}`)}
-              className="card p-5 cursor-pointer hover:shadow-card-hover transition-all duration-300 hover:-translate-y-0.5 group"
+              onClick={() => {
+                if (compareMode) {
+                  toggleSelect(player.playerId);
+                } else {
+                  navigate(`/player/${player.playerId}`);
+                }
+              }}
+              className={cn(
+                'card p-5 cursor-pointer hover:shadow-card-hover transition-all duration-300 hover:-translate-y-0.5 group',
+                compareMode && selectedIds.includes(player.playerId) && 'ring-2 ring-gold-500 ring-offset-2'
+              )}
             >
               <div className="flex items-start gap-4">
                 <div className="w-12 h-12 rounded-xl bg-gradient-navy flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
@@ -222,13 +371,24 @@ export default function PlayersPage() {
                     </div>
                   </div>
                 </div>
+                {compareMode && (
+                  <div className="flex-shrink-0">
+                    {selectedIds.includes(player.playerId) ? (
+                      <CheckSquare className="w-5 h-5 text-gold-600" />
+                    ) : (
+                      <Square className="w-5 h-5 text-navy-300 group-hover:text-gold-400 transition-colors" />
+                    )}
+                  </div>
+                )}
               </div>
               <div className="mt-4 pt-3 border-t border-navy-100/60 flex items-center justify-between">
                 <span className="text-xs text-navy-400 flex items-center gap-1">
                   <Award className="w-3 h-3" />
                   {player.institution}
                 </span>
-                <ChevronRight className="w-4 h-4 text-navy-300 group-hover:text-gold-500 group-hover:translate-x-0.5 transition-all" />
+                {!compareMode && (
+                  <ChevronRight className="w-4 h-4 text-navy-300 group-hover:text-gold-500 group-hover:translate-x-0.5 transition-all" />
+                )}
               </div>
             </div>
           ))

@@ -1,3 +1,4 @@
+import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   User,
@@ -14,6 +15,10 @@ import {
   PieChart,
   Calendar,
   ChevronRight,
+  Filter,
+  X,
+  GitCompare,
+  RotateCcw,
 } from 'lucide-react';
 import { useDebateStore } from '@/store/debateStore';
 import StatCard from '@/components/ui/StatCard';
@@ -42,12 +47,81 @@ const ROLE_COLORS: Record<string, string> = {
   '替补': '#b8cfe8',
 };
 
+type ResultFilter = 'all' | 'win' | 'draw' | 'loss';
+type SideFilter = 'all' | 'pro' | 'con';
+type SortField = 'date' | 'score' | 'round';
+
+interface MatchFilterState {
+  result: ResultFilter;
+  side: SideFilter;
+  role: string;
+  keyword: string;
+  sortField: SortField;
+  sortAsc: boolean;
+}
+
+const DEFAULT_FILTER: MatchFilterState = {
+  result: 'all',
+  side: 'all',
+  role: '',
+  keyword: '',
+  sortField: 'date',
+  sortAsc: false,
+};
+
 export default function PlayerProfilePage() {
   const { playerId } = useParams<{ playerId: string }>();
   const navigate = useNavigate();
   const store = useDebateStore();
+  const [filter, setFilter] = useState<MatchFilterState>(DEFAULT_FILTER);
+  const [showFilters, setShowFilters] = useState(false);
 
   const playerDetail = playerId ? store.getPlayerDetail(playerId) : null;
+
+  const allRoles = useMemo(() => {
+    if (!playerDetail) return [];
+    const roles = new Set(playerDetail.matchRecords.map((r) => r.actualRole));
+    return Array.from(roles);
+  }, [playerDetail]);
+
+  const filteredRecords = useMemo(() => {
+    if (!playerDetail) return [];
+    let records = [...playerDetail.matchRecords];
+
+    if (filter.result === 'win') records = records.filter((r) => r.isWin);
+    else if (filter.result === 'draw') records = records.filter((r) => r.isDraw);
+    else if (filter.result === 'loss') records = records.filter((r) => !r.isWin && !r.isDraw);
+
+    if (filter.side === 'pro') records = records.filter((r) => r.side === 'pro');
+    else if (filter.side === 'con') records = records.filter((r) => r.side === 'con');
+
+    if (filter.role) records = records.filter((r) => r.actualRole === filter.role);
+
+    if (filter.keyword.trim()) {
+      const kw = filter.keyword.trim().toLowerCase();
+      records = records.filter(
+        (r) =>
+          r.tournamentName.toLowerCase().includes(kw) ||
+          r.topicTitle.toLowerCase().includes(kw) ||
+          r.opponentTeamName.toLowerCase().includes(kw)
+      );
+    }
+
+    const dir = filter.sortAsc ? 1 : -1;
+    if (filter.sortField === 'date') records.sort((a, b) => (a.date - b.date) * dir);
+    else if (filter.sortField === 'score') records.sort((a, b) => (a.score - b.score) * dir);
+    else if (filter.sortField === 'round') records.sort((a, b) => (a.round - b.round) * dir);
+
+    return records;
+  }, [playerDetail, filter]);
+
+  const hasActiveFilters =
+    filter.result !== 'all' ||
+    filter.side !== 'all' ||
+    filter.role !== '' ||
+    filter.keyword.trim() !== '' ||
+    filter.sortField !== 'date' ||
+    filter.sortAsc !== false;
 
   if (!playerDetail) {
     return (
@@ -74,13 +148,20 @@ export default function PlayerProfilePage() {
 
   return (
     <div className="space-y-6 pb-16">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between">
         <button
           onClick={() => navigate(-1)}
           className="flex items-center gap-1.5 text-navy-600 hover:text-navy-900 text-sm font-medium transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           返回
+        </button>
+        <button
+          onClick={() => navigate(`/players?compareWith=${playerId}`)}
+          className="flex items-center gap-1.5 text-sm font-medium text-gold-600 hover:text-gold-700 bg-gold-50 hover:bg-gold-100 px-3 py-1.5 rounded-lg transition-colors"
+        >
+          <GitCompare className="w-4 h-4" />
+          横向对比
         </button>
       </div>
 
@@ -343,109 +424,222 @@ export default function PlayerProfilePage() {
 
       <div className="card overflow-hidden">
         <div className="px-6 py-4 border-b border-navy-100/60">
-          <h3 className="flex items-center gap-2 text-navy-900 font-serif text-lg font-semibold">
-            <Calendar className="w-5 h-5 text-gold-500" />
-            参赛记录
-            <span className="text-sm font-normal text-navy-500 ml-2">
-              共 {playerDetail.matchRecords.length} 场
-            </span>
-          </h3>
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <h3 className="flex items-center gap-2 text-navy-900 font-serif text-lg font-semibold">
+              <Calendar className="w-5 h-5 text-gold-500" />
+              参赛记录
+              <span className="text-sm font-normal text-navy-500 ml-2">
+                {hasActiveFilters
+                  ? `${filteredRecords.length} / ${playerDetail.matchRecords.length} 场`
+                  : `共 ${playerDetail.matchRecords.length} 场`}
+              </span>
+            </h3>
+            <div className="flex items-center gap-2">
+              {hasActiveFilters && (
+                <button
+                  onClick={() => setFilter(DEFAULT_FILTER)}
+                  className="flex items-center gap-1 text-xs text-navy-500 hover:text-red-500 transition-colors"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  重置筛选
+                </button>
+              )}
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={cn(
+                  'flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors',
+                  showFilters || hasActiveFilters
+                    ? 'bg-navy-800 text-white'
+                    : 'bg-navy-100 text-navy-700 hover:bg-navy-200'
+                )}
+              >
+                <Filter className="w-3.5 h-3.5" />
+                筛选
+                {hasActiveFilters && (
+                  <span className="w-4 h-4 rounded-full bg-gold-500 text-white text-[10px] flex items-center justify-center">
+                    {[filter.result !== 'all', filter.side !== 'all', filter.role !== '', filter.keyword.trim() !== ''].filter(Boolean).length}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {showFilters && (
+            <div className="mt-4 pt-4 border-t border-navy-100/60 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 stagger-fade-in">
+              <div>
+                <label className="text-xs text-navy-500 mb-1 block">比赛结果</label>
+                <select
+                  value={filter.result}
+                  onChange={(e) => setFilter((f) => ({ ...f, result: e.target.value as ResultFilter }))}
+                  className="input-base py-2 px-3 text-sm w-full"
+                >
+                  <option value="all">全部</option>
+                  <option value="win">胜</option>
+                  <option value="draw">平</option>
+                  <option value="loss">负</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-navy-500 mb-1 block">持方</label>
+                <select
+                  value={filter.side}
+                  onChange={(e) => setFilter((f) => ({ ...f, side: e.target.value as SideFilter }))}
+                  className="input-base py-2 px-3 text-sm w-full"
+                >
+                  <option value="all">全部</option>
+                  <option value="pro">正方</option>
+                  <option value="con">反方</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-navy-500 mb-1 block">角色</label>
+                <select
+                  value={filter.role}
+                  onChange={(e) => setFilter((f) => ({ ...f, role: e.target.value }))}
+                  className="input-base py-2 px-3 text-sm w-full"
+                >
+                  <option value="">全部</option>
+                  {allRoles.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-navy-500 mb-1 block">关键词</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={filter.keyword}
+                    onChange={(e) => setFilter((f) => ({ ...f, keyword: e.target.value }))}
+                    placeholder="赛事/辩题/对手…"
+                    className="input-base py-2 px-3 text-sm w-full pr-8"
+                  />
+                  {filter.keyword && (
+                    <button
+                      onClick={() => setFilter((f) => ({ ...f, keyword: '' }))}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-navy-400 hover:text-navy-600"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-navy-500 mb-1 block">排序</label>
+                <div className="flex gap-1.5">
+                  <select
+                    value={filter.sortField}
+                    onChange={(e) => setFilter((f) => ({ ...f, sortField: e.target.value as SortField }))}
+                    className="input-base py-2 px-3 text-sm flex-1"
+                  >
+                    <option value="date">按时间</option>
+                    <option value="score">按得分</option>
+                    <option value="round">按轮次</option>
+                  </select>
+                  <button
+                    onClick={() => setFilter((f) => ({ ...f, sortAsc: !f.sortAsc }))}
+                    className="input-base py-2 px-2.5 text-sm text-navy-600 hover:bg-navy-100"
+                    title={filter.sortAsc ? '升序' : '降序'}
+                  >
+                    {filter.sortAsc ? '↑' : '↓'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        {playerDetail.matchRecords.length > 0 ? (
+        {filteredRecords.length > 0 ? (
           <div className="divide-y divide-navy-100/60">
-            {playerDetail.matchRecords
-              .slice()
-              .sort((a, b) => b.date - a.date)
-              .map((record, idx) => (
-                <div
-                  key={record.matchId}
-                  className={cn(
-                    'px-6 py-4 hover:bg-navy-50/40 transition-colors cursor-pointer',
-                    'stagger-fade-in'
-                  )}
-                  style={{ animationDelay: `${idx * 30}ms` }}
-                  onClick={() => navigate(`/archive/${record.tournamentId}/match/${record.matchId}`)}
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                        <span
-                          className={cn(
-                            'badge text-xs',
-                            record.isWin
-                              ? 'badge-green'
-                              : record.isDraw
-                              ? 'badge-gold'
-                              : 'badge-red'
-                          )}
-                        >
-                          {record.isWin ? '胜' : record.isDraw ? '平' : '负'}
-                        </span>
-                        <span className="text-sm font-medium text-navy-800">
-                          第{record.round}轮 · 第{record.matchNumber}场
-                        </span>
-                        <span className="badge badge-blue text-xs">
-                          {record.actualRole}
-                        </span>
-                        {record.isMVP && (
-                          <span className="badge badge-gold">
-                            <Medal className="w-3 h-3" />
-                            MVP
-                          </span>
+            {filteredRecords.map((record, idx) => (
+              <div
+                key={record.matchId}
+                className={cn(
+                  'px-6 py-4 hover:bg-navy-50/40 transition-colors cursor-pointer',
+                  'stagger-fade-in'
+                )}
+                style={{ animationDelay: `${idx * 30}ms` }}
+                onClick={() => navigate(`/archive/${record.tournamentId}/match/${record.matchId}`)}
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                      <span
+                        className={cn(
+                          'badge text-xs',
+                          record.isWin
+                            ? 'badge-green'
+                            : record.isDraw
+                            ? 'badge-gold'
+                            : 'badge-red'
                         )}
-                      </div>
-                      <p className="text-sm text-navy-600 truncate">{record.topicTitle}</p>
-                      <div className="flex items-center gap-2 mt-1.5 text-xs text-navy-500 flex-wrap">
-                        <span className="font-medium text-navy-700 truncate max-w-[200px]" title={record.tournamentName}>
-                          {record.tournamentName}
+                      >
+                        {record.isWin ? '胜' : record.isDraw ? '平' : '负'}
+                      </span>
+                      <span className="text-sm font-medium text-navy-800">
+                        第{record.round}轮 · 第{record.matchNumber}场
+                      </span>
+                      <span className="badge badge-blue text-xs">
+                        {record.actualRole}
+                      </span>
+                      {record.isMVP && (
+                        <span className="badge badge-gold">
+                          <Medal className="w-3 h-3" />
+                          MVP
                         </span>
-                        <span>·</span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {new Date(record.date).toLocaleDateString('zh-CN')}
-                        </span>
-                        <span>·</span>
-                        <span>
-                          {record.side === 'pro' ? '正方' : '反方'}
-                        </span>
-                      </div>
+                      )}
                     </div>
-
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <p className="text-xs text-navy-500 mb-0.5">对阵</p>
-                        <p className="text-sm font-medium text-navy-700">
-                          vs {record.opponentTeamName}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs text-navy-500 mb-0.5">得分</p>
-                        <p
-                          className={cn(
-                            'text-xl font-bold font-serif',
-                            record.isWin
-                              ? 'text-emerald-600'
-                              : record.isDraw
-                              ? 'text-gold-600'
-                              : 'text-red-500'
-                          )}
-                        >
-                          {record.score.toFixed(1)}
-                        </p>
-                      </div>
-                      <ChevronRight className="w-5 h-5 text-navy-300 flex-shrink-0" />
+                    <p className="text-sm text-navy-600 truncate">{record.topicTitle}</p>
+                    <div className="flex items-center gap-2 mt-1.5 text-xs text-navy-500 flex-wrap">
+                      <span className="font-medium text-navy-700 truncate max-w-[200px]" title={record.tournamentName}>
+                        {record.tournamentName}
+                      </span>
+                      <span>·</span>
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {new Date(record.date).toLocaleDateString('zh-CN')}
+                      </span>
+                      <span>·</span>
+                      <span>
+                        {record.side === 'pro' ? '正方' : '反方'}
+                      </span>
                     </div>
                   </div>
+
+                  <div className="flex items-center gap-4">
+                    <div className="text-right">
+                      <p className="text-xs text-navy-500 mb-0.5">对阵</p>
+                      <p className="text-sm font-medium text-navy-700">
+                        vs {record.opponentTeamName}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-navy-500 mb-0.5">得分</p>
+                      <p
+                        className={cn(
+                          'text-xl font-bold font-serif',
+                          record.isWin
+                            ? 'text-emerald-600'
+                            : record.isDraw
+                            ? 'text-gold-600'
+                            : 'text-red-500'
+                        )}
+                      >
+                        {record.score.toFixed(1)}
+                      </p>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-navy-300 flex-shrink-0" />
+                  </div>
                 </div>
-              ))}
+              </div>
+            ))}
           </div>
         ) : (
           <div className="py-12">
             <Empty
               icon={<Swords className="h-10 w-10 text-navy-300" />}
-              title="暂无参赛记录"
-              description="该辩手尚未参加任何比赛"
+              title={hasActiveFilters ? '无匹配记录' : '暂无参赛记录'}
+              description={hasActiveFilters ? '当前筛选条件下没有匹配的比赛记录，试试调整条件' : '该辩手尚未参加任何比赛'}
             />
           </div>
         )}
