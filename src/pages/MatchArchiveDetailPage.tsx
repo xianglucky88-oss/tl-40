@@ -12,14 +12,13 @@ import {
   Gavel,
   BarChart3,
   FileText,
-  ChevronRight,
   Target,
-  TrendingUp,
   Clock as ClockIcon,
+  GitBranch,
 } from 'lucide-react';
 import { useDebateStore } from '@/store/debateStore';
 import { getFormatRules } from '@/engines/formatRules';
-import type { ArchivedMatch, ArchivedTeam, DebateStageConfig, PlayerScore } from '@/types';
+import type { DebateStageConfig } from '@/types';
 
 function formatTime(ts: number): string {
   const d = new Date(ts);
@@ -152,13 +151,22 @@ export default function MatchArchiveDetailPage() {
 
   return (
     <div className="space-y-6 stagger-fade-in">
-      <button
-        onClick={() => navigate(`/archive/${tournamentId}`)}
-        className="inline-flex items-center gap-1.5 text-navy-500 hover:text-navy-700 text-sm transition-colors"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        返回 {tournament.name}
-      </button>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <button
+          onClick={() => navigate(`/archive/${tournamentId}`)}
+          className="inline-flex items-center gap-1.5 text-navy-500 hover:text-navy-700 text-sm transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          返回 {tournament.name}
+        </button>
+        <button
+          onClick={() => navigate(`/archive/${tournamentId}/match/${matchId}/review`)}
+          className="btn-gold text-sm"
+        >
+          <GitBranch className="w-4 h-4" />
+          进入复盘模式
+        </button>
+      </div>
 
       <div className="card-navy p-6 md:p-8 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 rounded-full bg-gold-400/10 -translate-y-1/3 translate-x-1/3" />

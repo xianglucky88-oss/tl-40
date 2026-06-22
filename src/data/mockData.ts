@@ -16,6 +16,8 @@ import {
   MatchScore,
   ArgumentNode,
   ArgumentSide,
+  ReviewTimelineEvent,
+  MatchReview,
 } from '@/types';
 import { uid } from '@/engines/scoringEngine';
 import { getFormatRules } from '@/engines/formatRules';
@@ -933,4 +935,133 @@ const flattenArgs = (
 
 export const buildInitialArguments = (): ArgumentNode[] => {
   return flattenArgs(ARGUMENT_DATA);
+};
+
+export const buildInitialTimelineEvents = (): ReviewTimelineEvent[] => {
+  const baseTime = now - 1000 * 60 * 60;
+  return [
+    {
+      id: uid(),
+      matchId: 'arch_m_1',
+      type: 'argument',
+      stageIndex: 0,
+      timestamp: baseTime + 60 * 1000,
+      title: '正方一辩开篇立论',
+      description: '正方一辩系统阐述了AI发展对就业结构、医疗健康和教育公平三方面的积极影响，数据详实，逻辑清晰。',
+      side: 'pro',
+      speaker: '思远',
+      importance: 4,
+      tags: ['开篇立论', '核心论点'],
+      createdBy: '系统',
+      createdAt: baseTime + 120 * 1000,
+      updatedAt: baseTime + 120 * 1000,
+    },
+    {
+      id: uid(),
+      matchId: 'arch_m_1',
+      type: 'cross_examine',
+      stageIndex: 2,
+      timestamp: baseTime + 420 * 1000,
+      title: '反方质询高潮',
+      description: '反方二辩针对"AI创造新岗位"这一论点连续追问，质疑岗位转型的时间成本和社会阵痛期，正方应答略显被动。',
+      side: 'con',
+      speaker: '浩然',
+      importance: 5,
+      tags: ['质询', '关键交锋', '高潮'],
+      createdBy: '系统',
+      createdAt: baseTime + 480 * 1000,
+      updatedAt: baseTime + 480 * 1000,
+    },
+    {
+      id: uid(),
+      matchId: 'arch_m_1',
+      type: 'rebuttal',
+      stageIndex: 4,
+      timestamp: baseTime + 900 * 1000,
+      title: '精彩反驳：技术伦理维度',
+      description: '反方引入剑桥AI伦理研究所最新报告，指出AI决策偏见对弱势群体的系统性歧视，论据新颖有力。',
+      side: 'con',
+      speaker: '嘉怡',
+      importance: 5,
+      tags: ['反驳', '数据支撑', '伦理'],
+      createdBy: '系统',
+      createdAt: baseTime + 960 * 1000,
+      updatedAt: baseTime + 960 * 1000,
+    },
+    {
+      id: uid(),
+      matchId: 'arch_m_1',
+      type: 'mistake',
+      stageIndex: 5,
+      timestamp: baseTime + 1200 * 1000,
+      title: '正方数据引用失误',
+      description: '正方三辩引用失业率数据时年份出错，被反方当场指出，造成一定失分。此环节暴露了赛前准备的细节问题。',
+      side: 'pro',
+      speaker: '若涵',
+      importance: 3,
+      tags: ['失误', '数据错误'],
+      createdBy: '系统',
+      createdAt: baseTime + 1260 * 1000,
+      updatedAt: baseTime + 1260 * 1000,
+    },
+    {
+      id: uid(),
+      matchId: 'arch_m_1',
+      type: 'turning_point',
+      stageIndex: 6,
+      timestamp: baseTime + 1500 * 1000,
+      title: '自由辩论转折点',
+      description: '正方提出"人机协作"新框架，将讨论从"替代vs不替代"转向"如何更好协作"，成功拉回辩论主导权。',
+      side: 'pro',
+      speaker: '雨泽',
+      importance: 5,
+      tags: ['转折点', '自由辩论', '策略调整'],
+      createdBy: '系统',
+      createdAt: baseTime + 1560 * 1000,
+      updatedAt: baseTime + 1560 * 1000,
+    },
+    {
+      id: uid(),
+      matchId: 'arch_m_1',
+      type: 'summary',
+      stageIndex: 8,
+      timestamp: baseTime + 2100 * 1000,
+      title: '反方四辩总结陈词',
+      description: '反方四辩以"技术乐观主义不能遮蔽人文关怀"收尾，情感真挚，升华到位，获得评委一致好评。',
+      side: 'con',
+      speaker: '星宇',
+      importance: 4,
+      tags: ['总结陈词', '价值升华'],
+      createdBy: '系统',
+      createdAt: baseTime + 2160 * 1000,
+      updatedAt: baseTime + 2160 * 1000,
+    },
+  ];
+};
+
+export const buildInitialReviews = (): MatchReview[] => {
+  return [
+    {
+      id: 'review_1',
+      matchId: 'arch_m_1',
+      tournamentId: 'arch_1',
+      matchTitle: '第1轮 #1 人工智能的发展对人类未来利大于弊/弊大于利',
+      proTeamName: '北京大学青锋队',
+      conTeamName: '清华大学明辨队',
+      topicTitle: '人工智能的发展对人类未来利大于弊/弊大于利',
+      overallComment: '本场比赛堪称经典，双方辩手均展现了极高的专业素养。正方立论扎实但中期应对不足，反方质询犀利但价值升华略显仓促。整体而言是一场观赏性与思想性兼具的高质量对决。',
+      winnerAnalysis: '反方最终胜出主要得益于两点：一是质询环节对正方核心数据的有效拆解，二是伦理维度的持续施压。虽然正方在自由辩论后期成功引入"人机协作"新框架，但为时已晚，未能完全扭转局势。评委以5:2的投票结果判定反方获胜。',
+      keyTakeaways: [
+        '数据准备必须严谨，任何细节失误都可能被对手放大',
+        '自由辩论阶段的策略调整能力至关重要',
+        '价值升华需要贯穿全场，而非仅在结辩环节',
+        '质询问题的设计应层层递进，形成闭合逻辑链',
+      ],
+      createdBy: '赛事组委会',
+      createdAt: now - 1000 * 60 * 30,
+      updatedAt: now - 1000 * 60 * 30,
+      isPublic: true,
+      shareToken: 'share_abc123xyz',
+    },
+  ];
 };

@@ -537,3 +537,62 @@ export interface RecommendationContext {
   maxDifficulty?: number;
   minDifficulty?: number;
 }
+
+export type TimelineEventType =
+  | 'argument'
+  | 'rebuttal'
+  | 'mistake'
+  | 'cross_examine'
+  | 'highlight'
+  | 'turning_point'
+  | 'summary';
+
+export interface TimelineEventIconConfig {
+  label: string;
+  color: string;
+  bgColor: string;
+  borderColor: string;
+  dotColor: string;
+}
+
+export interface ReviewTimelineEvent {
+  id: string;
+  matchId: string;
+  type: TimelineEventType;
+  stageIndex: number;
+  timestamp: number;
+  title: string;
+  description: string;
+  side?: 'pro' | 'con' | 'both' | 'judge';
+  speaker?: string;
+  importance: 1 | 2 | 3 | 4 | 5;
+  tags: string[];
+  createdBy: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface MatchReview {
+  id: string;
+  matchId: string;
+  tournamentId?: string;
+  matchTitle: string;
+  proTeamName: string;
+  conTeamName: string;
+  topicTitle: string;
+  overallComment: string;
+  winnerAnalysis: string;
+  keyTakeaways: string[];
+  createdBy: string;
+  createdAt: number;
+  updatedAt: number;
+  isPublic: boolean;
+  shareToken?: string;
+}
+
+export interface ReviewShareData {
+  review: MatchReview;
+  events: ReviewTimelineEvent[];
+  shareUrl: string;
+  generatedAt: number;
+}

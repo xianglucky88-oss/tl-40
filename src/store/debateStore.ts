@@ -23,6 +23,9 @@ import {
   ArgumentTree,
   TopicCategory,
   BatchUpdatePayload,
+  ReviewTimelineEvent,
+  MatchReview,
+  ReviewShareData,
 } from '@/types';
 import {
   buildInitialTeams,
@@ -32,6 +35,8 @@ import {
   buildSampleMatches,
   buildArchivedTournaments,
   buildInitialArguments,
+  buildInitialTimelineEvents,
+  buildInitialReviews,
 } from '@/data/mockData';
 import {
   generateSingleElimination,
@@ -164,6 +169,23 @@ interface DebateState {
   removeArgument: (id: string) => void;
   voteArgument: (id: string, voterName: string) => { success: boolean; voted: boolean };
   getArgumentTreeByTopicId: (topicId: string) => ArgumentTree;
+
+  timelineEvents: ReviewTimelineEvent[];
+  addTimelineEvent: (
+    event: Omit<ReviewTimelineEvent, 'id' | 'createdAt' | 'updatedAt'>
+  ) => ReviewTimelineEvent;
+  updateTimelineEvent: (id: string, patch: Partial<ReviewTimelineEvent>) => void;
+  removeTimelineEvent: (id: string) => void;
+  getTimelineEventsByMatch: (matchId: string) => ReviewTimelineEvent[];
+
+  matchReviews: MatchReview[];
+  addMatchReview: (
+    review: Omit<MatchReview, 'id' | 'createdAt' | 'updatedAt' | 'shareToken'>
+  ) => MatchReview;
+  updateMatchReview: (id: string, patch: Partial<MatchReview>) => void;
+  removeMatchReview: (id: string) => void;
+  getReviewByMatchId: (matchId: string) => MatchReview | undefined;
+  generateShareLink: (reviewId: string) => ReviewShareData | null;
 }
 
 const defaultTournament = buildInitialTournament();
@@ -173,6 +195,8 @@ const defaultTopics = buildInitialTopics();
 const defaultMatches = buildSampleMatches(defaultTeams, defaultJudges, defaultTopics, defaultTournament);
 const defaultArchivedTournaments = buildArchivedTournaments();
 const defaultArguments = buildInitialArguments();
+const defaultTimelineEvents = buildInitialTimelineEvents();
+const defaultReviews = buildInitialReviews();
 
 const danmakuChannel =
   typeof BroadcastChannel !== 'undefined'
@@ -198,6 +222,8 @@ export const useDebateStore = create<DebateState>()(
 
       archivedTournaments: defaultArchivedTournaments,
       arguments: defaultArguments,
+      timelineEvents: defaultTimelineEvents,
+      matchReviews: defaultReviews,
 
       getAllJudgesSubmitted: (matchId: string): boolean => {
         const s = get();
@@ -1120,6 +1146,83 @@ export const useDebateStore = create<DebateState>()(
           conRoots: buildTree(null).filter((n) => n.side === 'con'),
         };
       },
+
+      addTimelineEvent: (event) => {
+        const now = Date.now();
+        const newEvent: ReviewTimelineEvent = {
+          ...event,
+          id: uid(),
+          createdAt: now,
+          updatedAt: now,
+        };
+        set((s) => ({ timelineEvents: [...s.timelineEvents, newEvent] }));
+        return newEvent;
+      },
+
+      updateTimelineEvent: (id, patch) => {
+        set((s) => ({
+          timelineEvents: s.timelineEvents.map((e) =>
+            e.id === id ? { ...e, ...patch, updatedAt: Date.now() } : e
+          ),
+        }));
+      },
+
+      removeTimelineEvent: (id) => {
+        set((s) => ({
+          timelineEvents: s.timelineEvents.filter((e) => e.id !== id),
+        }));
+      },
+
+      getTimelineEventsByMatch: (matchId) => {
+        return get()
+          .timelineEvents.filter((e) => e.matchId === matchId)
+          .sort((a, b) => a.timestamp - b.timestamp);
+      },
+
+      addMatchReview: (review) => {
+        const now = Date.now();
+        const newReview: MatchReview = {
+          ...review,
+          id: uid(),
+          createdAt: now,
+          updatedAt: now,
+          shareToken: `share_${uid()}`,
+        };
+        set((s) => ({ matchReviews: [...s.matchReviews, newReview] }));
+        return newReview;
+      },
+
+      updateMatchReview: (id, patch) => {
+        set((s) => ({
+          matchReviews: s.matchReviews.map((r) =>
+            r.id === id ? { ...r, ...patch, updatedAt: Date.now() } : r
+          ),
+        }));
+      },
+
+      removeMatchReview: (id) => {
+        set((s) => ({
+          matchReviews: s.matchReviews.filter((r) => r.id !== id),
+        }));
+      },
+
+      getReviewByMatchId: (matchId) => {
+        return get().matchReviews.find((r) => r.matchId === matchId);
+      },
+
+      generateShareLink: (reviewId) => {
+        const review = get().matchReviews.find((r) => r.id === reviewId);
+        if (!review) return null;
+        const events = get().getTimelineEventsByMatch(review.matchId);
+        const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+        const shareUrl = `${baseUrl}/review/share/${review.shareToken ?? reviewId}`;
+        return {
+          review,
+          events,
+          shareUrl,
+          generatedAt: Date.now(),
+        };
+      },
     }),
     {
       name: 'debate-tournament-store',
@@ -1138,6 +1241,8 @@ export const useDebateStore = create<DebateState>()(
         danmakuFilterByMatch: state.danmakuFilterByMatch,
         archivedTournaments: state.archivedTournaments,
         arguments: state.arguments,
+        timelineEvents: state.timelineEvents,
+        matchReviews: state.matchReviews,
       }),
     }
   )
